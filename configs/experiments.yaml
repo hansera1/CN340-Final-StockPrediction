@@ -1,0 +1,60 @@
+# ตารางจับคู่การทดลอง E0–E6 กับรหัสไอเดียเดิมของกลุ่ม (หัวข้อ 10)
+# variant แรกของแต่ละการทดลองคือ "ฐาน" — variant ถัดไปจะถูกเทียบกับฐานด้วย block bootstrap
+#
+# ตัวเลือกของ variant:
+#   model:           baseline | independent | cascade | cnn1d
+#   feature_minutes: ความละเอียดแท่งที่ใช้สร้าง features (labels ใช้ 1 นาทีเสมอ)
+#   spectral:        เพิ่ม band power จาก Welch/STFT
+#   group_by:        [symbol, session] = แยกหุ้น/รอบ (หลัก), [session] = แชร์ข้อมูลข้ามหุ้น
+#   sessions:        จำกัดรอบ (เช่น CNN เริ่มที่รอบบ่าย)
+
+E0:
+  question: เกณฑ์พื้นฐานดีแค่ไหน
+  legacy: แบบ A, ทายตาม gap/momentum
+  variants:
+    - {name: baseline, model: baseline}
+
+E1:
+  question: ข้อมูลที่มีให้ประโยชน์หรือไม่
+  legacy: M1–M4, M6, แบบ B, ablation กลุ่ม feature
+  variants:
+    - {name: baseline, model: baseline}
+    - {name: independent, model: independent}
+
+E2:
+  question: โมเดลสองขั้นช่วยจริงหรือไม่
+  legacy: M5, แบบ C เทียบ B (แบบ D + M7)
+  variants:
+    - {name: independent, model: independent}
+    - {name: cascade, model: cascade}
+
+E3:
+  question: ความละเอียด / ความใหม่มีผลอย่างไร
+  legacy: D2, D6, D9
+  variants:
+    - {name: res_1m, model: independent, feature_minutes: 1}
+    - {name: res_5m, model: independent, feature_minutes: 5}
+    - {name: res_15m, model: independent, feature_minutes: 15}
+
+E4:
+  question: ลำดับข้อมูลช่วยหรือไม่
+  legacy: C1, C2
+  variants:
+    - {name: independent, model: independent, sessions: [afternoon]}
+    - {name: cnn1d, model: cnn1d, sessions: [afternoon]}
+
+E5:
+  question: เวลา–ความถี่ช่วยเหนือฐานหรือไม่
+  legacy: C8
+  variants:
+    - {name: independent, model: independent}
+    - {name: spectral, model: independent, spectral: true}
+
+E6:
+  question: การแชร์ข้อมูลข้ามหุ้นช่วยเป้าหมายจริงหรือไม่
+  legacy: D5
+  variants:
+    - {name: per_symbol, model: independent, group_by: [symbol, session]}
+    - {name: pooled, model: independent, group_by: [session]}
+
+# พักไว้จนกว่าจะมีเวลาและอาจารย์ยืนยัน: C3–C7, Chronos-2, stacking หลายชั้น

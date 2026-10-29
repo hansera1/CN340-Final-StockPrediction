@@ -1,0 +1,23 @@
+group,feature,example,available_at_th,sessions,source,status
+ตลาดสหรัฐฯ,f_ext_us_*,ผลตอบแทน S&P 500 / Nasdaq คืนก่อน,หลังตลาดสหรัฐฯ ปิด ราว 03:00–04:00,both,data/external/us.csv,ต้องยืนยันเวลาพร้อมใช้
+ตลาดเอเชีย,f_ext_asia_*,Nikkei ช่วงแรก; Hang Seng / CSI300 ช่วงแรก,ญี่ปุ่นเปิด 07:00; ฮ่องกง/จีนเปิด 08:30,both,data/external/asia.csv,ต้องยืนยันเวลาพร้อมใช้
+ค่าเงิน,f_ext_fx_*,USD/THB เปลี่ยนแปลงข้ามคืนและถึงจุดตัด,ต่อเนื่อง ณ จุดตัด,both,data/external/fx.csv,ต้องยืนยันเวลาพร้อมใช้
+อัตราดอกเบี้ย,f_ext_bond_*,พันธบัตรไทยและสหรัฐฯ 10 ปี (สำคัญกับ KBANK),ค่าล่าสุดที่เผยแพร่ก่อนจุดตัด,both,data/external/bond.csv,ต้องยืนยันเวลาพร้อมใช้
+ฟลอว์,f_ext_flow_*,ซื้อขายสุทธินักลงทุนต่างชาติ NVDR รายหุ้น,หลังเผยแพร่ของวันก่อน,both,data/external/flow.csv,ต้องตรวจเวลาเผยแพร่จริง
+SET50 futures,f_ext_tfex_*,ผลตอบแทนและ basis,ต้องเช็กเวลาเปิด TFEX; ถ้าเปิดหลัง c_เช้า ใช้ได้เฉพาะรอบบ่าย,afternoon,data/external/tfex.csv,ต้องยืนยันเวลาพร้อมใช้
+หุ้นเป้าหมายวันนี้,f_r_open_to_cut,r ภาคเช้าถึงจุดตัด,10:00 ถึง c_บ่าย,afternoon,features/build.py,พร้อม
+หุ้นเป้าหมายวันนี้,f_r_last30,r 30 นาทีล่าสุดที่จบแล้ว,10:00 ถึง c_บ่าย,afternoon,features/build.py,พร้อม
+หุ้นเป้าหมายวันนี้,f_rv_intra,realized volatility ภาคเช้าถึงจุดตัด,10:00 ถึง c_บ่าย,afternoon,features/build.py,พร้อม
+หุ้นเป้าหมายวันนี้,f_vol_ratio_same_time,volume สะสมเทียบเวลาเดียวกันของ 20 วันก่อน,10:00 ถึง c_บ่าย,afternoon,features/build.py,พร้อม
+หุ้นเป้าหมายวันนี้,f_gap_open,ราคาเปิดเช้าเทียบปิดเมื่อวาน,หลัง 10:00,afternoon,features/build.py,พร้อม
+หุ้นเป้าหมายวันนี้,f_hl_range_intra,high–low ภาคเช้าถึงจุดตัด (ต้องมี OHLC),10:00 ถึง c_บ่าย,afternoon,features/build.py,ใช้เมื่อมี high/low
+ช่วงเวลาเดียวกันในอดีต,f_r_same_mean5 / 10 / 20,ค่าเฉลี่ย r_เช้า หรือ r_บ่าย ย้อนหลัง 5 / 10 / 20 วัน,ข้อมูลวันก่อน ๆ,both,features/build.py,พร้อม
+Reversal,f_r_prev_morning / f_r_prev_afternoon,ผลตอบแทนรอบของเมื่อวาน,ข้อมูลที่จบแล้ว,both,features/build.py,พร้อม
+Reversal,f_ret_1d,ผลตอบแทนเมื่อวาน,ข้อมูลที่จบแล้ว,both,features/build.py,พร้อม
+แนวโน้ม,f_ret_5d / f_ret_20d / f_dist_ma20,แนวโน้มและระยะห่างจากค่าเฉลี่ย,ข้อมูลวันก่อน,both,features/build.py,พร้อม
+ความผันผวน,f_rv_5d / f_rv_20d,realized volatility รายวันแบบ HAR,ข้อมูลวันก่อน,both,features/build.py,พร้อม
+ปริมาณ,f_rvol_1d,volume เมื่อวานเทียบค่าเฉลี่ย 20 วัน,ข้อมูลวันก่อน,both,features/build.py,พร้อม
+ข้ามหลักทรัพย์,f_x_<SYMBOL>_*,หุ้นเป้าหมายอีกตัว (SET50 / BBL / SCB / KTB / TRUE ถ้ามีไฟล์),ถึงจุดตัด,both,features/dataset.py,พร้อม (เฉพาะหุ้นใน rules.yaml)
+เวลา–ความถี่,f_bp_*,band power จาก Welch ของ r รายนาทีถึงจุดตัด,ถึงจุดตัด,both,features/spectral.py,ใช้ใน E5
+ปฏิทิน,f_dow,วันในสัปดาห์,กำหนดการที่ทราบล่วงหน้า,both,features/build.py,พร้อม
+ปฏิทิน,f_ext_cal_*,วันถึงประกาศงบ / XD / วันหลังข่าวสหรัฐฯ สำคัญ,กำหนดการที่ทราบล่วงหน้า,both,data/external/calendar.csv,ต้องกรอกเอง

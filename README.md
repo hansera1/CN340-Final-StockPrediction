@@ -1,0 +1,114 @@
+# พยากรณ์หุ้น KBANK และ ADVANC
+
+โปรเจกต์ตาม **แผนพยากรณ์หุ้น ฉบับรวมสุดท้าย (29 ต.ค. 2026)** — โมเดลสองขั้น · ข้อมูลหลายความละเอียด · CNN และเวลา–ความถี่
+ใช้งานจริง **9–13 พ.ย. 2026** ส่งคำทำนายให้อาจารย์ภายใน **09:30** (รอบเช้า) และ **12:30** (รอบบ่าย)
+
+| รอบ | กำหนดส่ง | ทิศทาง | ราคาที่ต้องทำนาย |
+|---|---|---|---|
+| เช้า | 09:30 | P(12:30) เทียบ P(10:00) | P(12:30) |
+| บ่าย | 12:30 | P(16:30) เทียบ P(14:00) | P(16:30) |
+
+> สถานะ: โค้ดผ่านการทดสอบด้วย **ข้อมูลจำลอง** เท่านั้น ยังไม่ได้ตรวจกับข้อมูลจริง ไม่ใช่คำแนะนำการลงทุน
+
+---
+
+## โครงสร้างโฟลเดอร์
+
+```
+kbank_advanc_forecast/
+│
+├── configs/                  ⚙️  กติกากลาง — แก้ที่นี่ที่เดียว
+│   ├── rules.yaml               เวลาตัด/ส่ง, นิยามราคา, flat, quantiles, walk-forward, โมเดลที่ใช้ส่งจริง
+│   ├── experiments.yaml         E0–E6 จับคู่กับรหัสไอเดียเดิม (D, M, C)
+│   └── feature_dictionary.csv   feature ทุกตัว + เวลาที่พร้อมใช้ + รอบที่ใช้ได้
+│
+├── data/                     📦  ข้อมูล (ไม่แก้ไฟล์ดิบ)
+│   ├── raw/                     แท่งรายนาที <SYMBOL>_1min.csv  (_synthetic/ = ข้อมูลจำลอง)
+│   ├── external/                ตลาดต่างประเทศ ค่าเงิน พันธบัตร ฟลอว์ ปฏิทิน (มี available_at)
+│   └── processed/               dataset ที่สร้างแล้ว (สร้างใหม่ได้เสมอ)
+│
+├── src/forecast/             🧠  โค้ดหลัก (แบ่งตามหน้าที่)
+│   ├── config.py                โหลดกติกา + เวลาของแต่ละรอบ
+│   ├── data/                    โหลด · ตรวจคุณภาพ · ราคา ณ จุดเวลา (as-of)
+│   ├── labels/                  r, z, ทิศทาง, ราคาอ้างอิง P(c)
+│   ├── features/                features ที่รู้ทันเวลา · ข้ามหุ้น · ข้อมูลเสริม · spectral · ลำดับสำหรับ CNN
+│   ├── models/                  baseline (A) · independent (B) · cascade (C) · cnn1d (D)
+│   ├── evaluation/              walk-forward · ตัวชี้วัด · block bootstrap · runner
+│   └── live/                    ทำนายวันจริง · fallback · log
+│
+├── scripts/                  ▶️  รันตามลำดับเลข
+│   ├── 00_fetch_settrade.py        ดึงแท่งรายนาทีจาก Settrade Open API (+ วัดความหน่วง)
+│   ├── 00_make_synthetic_data.py   ข้อมูลจำลองไว้ทดสอบ pipeline
+│   ├── 01_check_data.py            ตรวจคุณภาพ + จำนวนตัวอย่างจริง
+│   ├── 02_build_dataset.py         สร้าง dataset
+│   ├── 03_run_experiment.py        รัน E0–E6 + bootstrap
+│   ├── 04_lock_model.py            ล็อกวิธี ฝึกโมเดลสุดท้าย
+│   ├── 05_predict_live.py          ส่งจริง (เช้า/บ่าย)
+│   └── 06_score_live.py            ให้คะแนนหลังรู้ผล
+│
+├── tests/                    ✅  ทดสอบการรั่วของอนาคต · labels · โมเดล
+│
+├── docs/                     📄  สรุปแผนแยกหัวข้อ (อ่านง่าย)
+│   ├── 01_โจทย์และกติกา.md
+│   ├── 02_ข้อมูลและfeatures.md
+│   ├── 03_โมเดลและการทดลอง.md
+│   ├── 04_การประเมินผล.md
+│   ├── 05_แผนเวลาและงาน.md
+│   ├── 06_คู่มือวันจริง.md
+│   └── 07_แหล่งอ้างอิง.md
+│
+└── outputs/                  📊  ผลลัพธ์ทั้งหมด (สร้างอัตโนมัติ)
+    ├── reports/                 รายงานคุณภาพข้อมูล · คะแนนวันจริง
+    ├── experiments/<E>/         summary.csv · bootstrap.csv · predictions ต่อ variant
+    ├── models/<E>/<variant>/    โมเดลที่ล็อกแล้ว
+    ├── predictions/             ไฟล์ส่งอาจารย์ <วันที่>_<รอบ>.csv
+    └── logs/                    predictions.jsonl (บันทึกก่อนรู้ผล ห้ามแก้)
+```
+
+---
+
+## เริ่มต้นใช้งาน
+
+```bash
+pip install -r requirements.txt
+
+# 1) ทดสอบ pipeline ด้วยข้อมูลจำลอง
+python scripts/00_make_synthetic_data.py
+python scripts/03_run_experiment.py E0 E1 --raw-dir data/raw/_synthetic
+python -m pytest -q
+
+# 2) ข้อมูลจริง: คัดลอก .env.example เป็น .env แล้วกรอกรหัส Settrade (ห้าม commit)
+python scripts/00_fetch_settrade.py --probe            # ดู response ดิบก่อน
+python scripts/00_fetch_settrade.py --start 2024-01-01 # → data/raw/<SYMBOL>_1min.csv
+python scripts/01_check_data.py
+python scripts/02_build_dataset.py
+python scripts/03_run_experiment.py E0 E1 E2
+
+# 3) ล็อกวิธี (5 พ.ย.) → แก้ live ใน configs/rules.yaml แล้ว
+python scripts/04_lock_model.py
+
+# 4) วันจริง (9–13 พ.ย.)
+python scripts/05_predict_live.py morning     # ที่ c_เช้า ส่งก่อน 09:30
+python scripts/05_predict_live.py afternoon   # ที่ c_บ่าย ส่งก่อน 12:30
+python scripts/06_score_live.py               # ตอนเย็น
+```
+
+## ต้องยืนยันก่อนล็อกวิธี (แก้ใน `configs/rules.yaml`)
+
+ค่าตอนนี้เป็นค่าชั่วคราว (มี comment "ชั่วคราว รอยืนยัน" ในไฟล์)
+
+- [ ] `bar_timestamp` (ตอนนี้ `start`) — ดูจาก `01_check_data.py` ซึ่งพิมพ์แท่งแรก/สุดท้ายของแต่ละภาค แท่งหลัง 16:30 และเตือนถ้าไม่ตรง config
+- [ ] `cutoff` ของแต่ละรอบ หลังวัดความหน่วงจริง (ตอนนี้ 09:15 / 12:15)
+- [ ] `label.price_1630` (ตอนนี้ `last_trade_at_or_before`) — ราคาปิดประมูลเก็บแยกไว้ในคอลัมน์ `p_close_auction` สลับเป็น `closing_auction` ได้ทันที
+- [ ] `label.flat.scoring` — ระหว่างรอ รายงานทั้ง `acc_flat_as_wrong` และ `acc_flat_excluded` (flat = ต่าง 0 tick)
+- [ ] ขอบเขตโมเดลที่อาจารย์อนุญาต (รวม pretrained)
+- [ ] รูปแบบไฟล์ส่งอาจารย์ และการปัด tick
+
+## หลักที่โค้ดบังคับไว้
+
+1. **ไม่เห็นอนาคต** — features ใช้เฉพาะแท่งที่ `bar_end ≤ cutoff`; วันจริงตัดข้อมูลดิบทิ้งก่อนเริ่ม (`tests/test_no_leakage.py`)
+2. **backtest = วันจริง** — ทั้งสองใช้ `assemble_dataset()` ตัวเดียวกัน (ทดสอบว่าได้ค่าเท่ากัน)
+3. **แบ่งตามเวลาเท่านั้น** — walk-forward รายสัปดาห์, กัน holdout ท้ายไว้ใช้หลังล็อก
+4. **cascade ใช้ temporal OOF** — probability ขั้น 1 มาจากโมเดลที่ฝึกบนอดีตเท่านั้น
+5. **เทียบโมเดลด้วย block bootstrap รายวัน** — ไม่ใช้ binomial เทียบ 50%
+6. **มี fallback เสมอ** — ถ้าขั้นใดล้ม ใช้ baseline พร้อมธงเหตุผลใน log

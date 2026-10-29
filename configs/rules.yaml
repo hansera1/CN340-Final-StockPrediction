@@ -1,0 +1,52 @@
+# กติกากลาง (หัวข้อ 01–02, 05, 11 ในแผน) — ทุกสคริปต์อ่านจากไฟล์นี้ไฟล์เดียว
+# ค่าที่มีหมายเหตุ "ต้องยืนยัน" ต้องคุยกับอาจารย์ / วัดความหน่วงก่อนล็อกวิธี (5 พ.ย.)
+
+timezone: Asia/Bangkok
+symbols: [KBANK, ADVANC]
+
+# ข้อมูลดิบรายนาที
+bar_minutes: 1
+bar_timestamp: start        # ชั่วคราว รอยืนยัน: ตรวจจาก 01_check_data.py (แท่งสุดท้ายเช้า 12:29 = start, 12:30 = end)
+
+sessions:
+  morning:
+    submit_deadline: "09:30"   # ยืนยันแล้ว
+    cutoff: "09:15"            # c_เช้า — ชั่วคราว รอผลวัดความหน่วง
+    start_time: "10:00"        # P(10:00)
+    end_time: "12:30"          # P(12:30)
+  afternoon:
+    submit_deadline: "12:30"   # ยืนยันแล้ว
+    cutoff: "12:15"            # c_บ่าย — ชั่วคราว รอผลวัดความหน่วง (สำคัญ: กำหนดว่าใช้ข้อมูลเช้าถึงนาทีไหน)
+    start_time: "14:00"        # P(14:00)
+    end_time: "16:30"          # P(16:30)
+
+# ภาคบ่ายเปิด 14:00 ตั้งแต่ 25 มี.ค. 2024 (ก่อนหน้านั้น 14:30) — ใช้ข้อมูลบ่ายหลังวันนี้เท่านั้น
+afternoon_history_start: "2024-03-25"
+
+label:
+  # ราคา 16:30 — ชั่วคราว รอยืนยันกับอาจารย์
+  #   last_trade_at_or_before = ราคาซื้อขายล่าสุด ณ/ก่อน 16:30 (สิ้นสุด continuous)
+  #   closing_auction         = ราคาปิดประมูล (ATC, แท่งหลัง 16:30)
+  price_1630: last_trade_at_or_before
+  store_closing_auction: true    # เก็บราคาปิดประมูลเป็นคอลัมน์ p_close_auction ไว้สลับได้โดยไม่ต้องดึงข้อมูลใหม่
+  flat:
+    definition: exact_equal      # ชั่วคราว: ปลายช่วง = ต้นช่วงพอดี (ต่าง 0 tick) | within_ticks (ใช้คู่กับ ticks)
+    ticks: 0                     # ใช้เมื่อ definition = within_ticks
+    label_states: 3              # ขึ้น / เท่าเดิม / ลง
+    scoring: [flat_as_wrong, flat_excluded]   # รอยืนยันกับอาจารย์ — รายงานทั้งสองแบบไปก่อน
+  start_price_tolerance_min: 5   # ถ้าไม่มีคอลัมน์ open ใช้ราคาแรกหลังเวลาเริ่มภายในกี่นาที
+  max_end_staleness_min: 15      # ราคาปลายช่วงต้องไม่เก่ากว่านี้ ไม่งั้นนับเป็นข้อมูลหาย
+
+quantiles: [0.10, 0.25, 0.50, 0.75, 0.90]
+
+evaluation:
+  test_block_days: 5       # เลื่อนช่วงทดสอบทีละสัปดาห์
+  min_train_days: 120
+  holdout_days: 10         # กันช่วงท้ายไว้ใช้หลังล็อกวิธีเท่านั้น
+  n_boot: 2000
+  block_days: 1            # ขนาดบล็อกวันของ block bootstrap
+
+live:
+  experiment: E1           # โมเดลที่ล็อกแล้วใช้ส่งจริง (แก้หลัง 5 พ.ย.)
+  variant: independent
+  max_price_age_min: 30    # สำหรับรอบบ่าย: ราคา P(c) ต้องไม่เก่ากว่านี้
