@@ -23,6 +23,8 @@ class PredictionLog:
     price_quantiles: dict = field(default_factory=dict)  # ราคาปัดตามช่องราคาแล้ว
     point_price: float | None = None
     fallback_reason: str | None = None
+    data_source: str | None = None       # แหล่งแท่ง 1m วันนี้ (settrade / yfinance / history-only)
+    data_lag_sec: float | None = None    # จุดตัด − เวลาจบของแท่ง 1m ล่าสุดที่ใช้
 
 
 def append_log(path, record):

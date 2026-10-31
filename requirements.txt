@@ -5,5 +5,12 @@ scipy>=1.10
 pyyaml>=6.0
 pytest>=7
 settrade_v2>=2.2      # 00_fetch_settrade.py
-# ใช้เฉพาะ E4 (1D-CNN)
+yfinance>=0.2         # 00_fetch_yfinance.py
+lightgbm>=4.0         # E9-GBM
+# model zoo (ภาคผนวก รอบที่ 2)
+xgboost>=2.0
+catboost>=1.2
+# ใช้เฉพาะ E4 (1D-CNN) และ E7 (ResNet18) — GPU ใช้อัตโนมัติถ้ามี
 torch>=2.0
+torchvision>=0.17
+Pillow>=10

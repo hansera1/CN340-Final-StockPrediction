@@ -11,7 +11,7 @@ from pathlib import Path
 import _setup  # noqa: F401
 
 from forecast.config import OUTPUT_DIR, load_experiments, load_rules
-from forecast.evaluation.runner import fit_final, load_or_build_dataset, sequences_for
+from forecast.evaluation.runner import fit_final, load_or_build_dataset, sequences_for, variant_interval
 
 
 def main():
@@ -22,10 +22,16 @@ def main():
     ap.add_argument("--raw-dir", type=Path)
     args = ap.parse_args()
 
-    v = next(v for v in load_experiments()[args.exp]["variants"] if v["name"] == args.variant)
-    ds = load_or_build_dataset(rules, v.get("feature_minutes", 1), v.get("spectral", False),
-                               args.raw_dir, rebuild=True)
-    seqs = sequences_for(ds, rules, args.raw_dir) if v["model"] == "cnn1d" else None
+    exp = load_experiments()[args.exp]
+    if exp.get("pilot"):
+        raise SystemExit(f"{args.exp} เป็น pilot (ข้อมูลน้อย) — ไม่ควรล็อกเป็นโมเดลส่งจริง")
+    v = next(v for v in exp["variants"] if v["name"] == args.variant)
+    interval = variant_interval(rules, exp, v)
+    if interval != rules["data"]["interval"]:
+        raise SystemExit(f"variant นี้ใช้ {interval} แต่วันจริงสร้าง features จาก {rules['data']['interval']}")
+    ds = load_or_build_dataset(rules, v.get("feature_minutes"), v.get("spectral", False),
+                               args.raw_dir, rebuild=True, interval=interval)
+    seqs = sequences_for(ds, rules, args.raw_dir, interval) if v["model"] == "cnn1d" else None
     paths = fit_final(ds, v, rules, args.exp, OUTPUT_DIR / "models" / args.exp / args.variant, seqs)
     for p in paths:
         print("บันทึก", p)

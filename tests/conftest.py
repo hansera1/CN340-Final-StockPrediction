@@ -22,6 +22,7 @@ def synthetic_bars(start_price, n_days, seed):
 def rules():
     r = load_rules()
     r["bar_timestamp"] = "end"          # synthetic_bars ใช้เวลาจบแท่ง (10:01 … 16:30)
+    r["data"] = {"source": "_synthetic", "interval": "1m"}
     r["evaluation"].update(min_train_days=20, test_block_days=5, holdout_days=5, n_boot=50)
     return r
 
@@ -29,5 +30,5 @@ def rules():
 @pytest.fixture
 def raw_dir(tmp_path):
     for i, (sym, p) in enumerate({"KBANK": 150.0, "ADVANC": 300.0}.items()):
-        synthetic_bars(p, 45, i).to_csv(tmp_path / f"{sym}_1min.csv", index=False)
+        synthetic_bars(p, 45, i).to_csv(tmp_path / f"{sym}_1m.csv", index=False)
     return tmp_path

@@ -4,9 +4,15 @@
 timezone: Asia/Bangkok
 symbols: [KBANK, ADVANC]
 
-# ข้อมูลดิบรายนาที
-bar_minutes: 1
-bar_timestamp: start        # ชั่วคราว รอยืนยัน: ตรวจจาก 01_check_data.py (แท่งสุดท้ายเช้า 12:29 = start, 12:30 = end)
+# ข้อมูลดิบ: data/raw/<source>/<SYMBOL>_<interval>.csv
+# Settrade 1m ย้อนได้แค่ ~4 วันทำการ → backtest ใช้ yfinance 60m (~2 ปี) ซึ่งตรวจแล้วว่าราคา label ตรงกับ Settrade
+data:
+  source: yfinance           # โฟลเดอร์ใต้ data/raw/
+  interval: 60m              # ความละเอียดของไฟล์หลัก (labels + features)
+  # P(10:00) ของไฟล์หยาบ = open รายวัน (= ราคาประมูลเปิด) — open แท่ง 60m ของ yfinance คือราคา ณ 10:00 ซึ่งต่างได้ 1 tick
+  # ไม่ใช้ yfinance 1d: ปี 2024 มี ~60 วันที่ราคาแบนและ volume 0 (ไม่ตรง Settrade) ทั้งที่แท่ง 60m วันเดียวกันปกติ
+  daily_open_sources: [settrade]   # data/raw/settrade/<SYMBOL>_1d.csv (~3 ปี)
+bar_timestamp: start         # ยืนยันจากข้อมูลจริงแล้ว ทั้ง Settrade และ yfinance (แท่งสุดท้ายเช้า 12:29 / 60m 12:00)
 
 sessions:
   morning:
@@ -34,8 +40,14 @@ label:
     ticks: 0                     # ใช้เมื่อ definition = within_ticks
     label_states: 3              # ขึ้น / เท่าเดิม / ลง
     scoring: [flat_as_wrong, flat_excluded]   # รอยืนยันกับอาจารย์ — รายงานทั้งสองแบบไปก่อน
-  start_price_tolerance_min: 5   # ถ้าไม่มีคอลัมน์ open ใช้ราคาแรกหลังเวลาเริ่มภายในกี่นาที
+  # P(10:00) / P(14:00) = open ของแท่งแรกของภาค (แท่งประมูลเปิด); P(12:30) / P(16:30) = close แท่งล่าสุด ≤ 12:29 / 16:29
+  start_price_tolerance_min: 5   # แท่งแรกของภาคต้องเริ่มไม่เกินเวลาเริ่มช่วง + กี่นาที ไม่งั้นถือว่าข้อมูลหาย
   max_end_staleness_min: 15      # ราคาปลายช่วงต้องไม่เก่ากว่านี้ ไม่งั้นนับเป็นข้อมูลหาย
+
+features:
+  # ไม่ใช้ volume สะสมภายในวัน: volume ช่วงเช้าของ yfinance เสีย (แท่ง 10:00 มักเป็น 0) ทำให้ค่าจาก backtest
+  # ต่างจากวันจริงที่คำนวณจาก 1m (01b_validate_sources.py: ต่างสูงสุด ~2.8 ส่วน features ราคาเท่ากันทุกค่า)
+  exclude: [vol_ratio_same_time]   # ตัดทั้งของหุ้นตัวเองและของหุ้นอีกตัว (f_x_<SYM>_...)
 
 quantiles: [0.10, 0.25, 0.50, 0.75, 0.90]
 
@@ -49,4 +61,9 @@ evaluation:
 live:
   experiment: E1           # โมเดลที่ล็อกแล้วใช้ส่งจริง (แก้หลัง 5 พ.ย.)
   variant: independent
+  fallback_target: updown  # baseline สำรอง: P(ขึ้น) = สัดส่วนขึ้นในวันไม่ flat (รอบที่ 2) | up = สัดส่วนขึ้นของทุกวัน
   max_price_age_min: 30    # สำหรับรอบบ่าย: ราคา P(c) ต้องไม่เก่ากว่านี้
+  # แท่ง 1m ของ "วันนี้" ในวันจริง: ลองตามลำดับ แล้วรวมเป็น data.interval ด้วย aggregate_bars (แบบ yfinance)
+  # Settrade ยังไม่มีสิทธิ์ market data → yfinance 1m เป็นสำรอง
+  sources: [settrade, yfinance]
+  max_bar_lag_min: 5       # แท่งล่าสุดของแหล่งต้องจบไม่เกินกี่นาทีก่อนจุดตัด ไม่งั้นลองแหล่งถัดไป

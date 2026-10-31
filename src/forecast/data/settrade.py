@@ -1,11 +1,10 @@
-"""ดึงแท่งรายนาทีจาก Settrade Open API (settrade_v2) → data/raw/<SYMBOL>_1min.csv
+"""ดึงแท่งราคาจาก Settrade Open API (settrade_v2) → data/raw/settrade/<SYMBOL>_<interval>.csv
 
 รหัสเข้าถึงอ่านจาก environment variable หรือไฟล์ .env ที่ root โปรเจกต์ (อยู่ใน .gitignore) เท่านั้น
     SETTRADE_APP_ID, SETTRADE_APP_SECRET, SETTRADE_APP_CODE, SETTRADE_BROKER_ID
 """
 import os
 import sys
-import time
 
 import pandas as pd
 
@@ -74,43 +73,6 @@ def fetch_latest(market, symbol, interval, rules, limit=1000):
                                                    normalized=False), rules)
 
 
-INTERVAL_MIN = {"1m": 1, "5m": 5, "15m": 15, "60m": 60, "1d": 1440}
-
-
-def drop_unfinished(df, rules, now, minutes=None):
-    """ตัดแท่งที่ยังไม่จบ ณ เวลาที่ดึง — ไม่ให้ค่าครึ่งแท่งถูกบันทึกถาวร"""
-    freq = pd.Timedelta(minutes=minutes or rules["bar_minutes"])
-    end = df["timestamp"] + (freq if rules["bar_timestamp"] == "start" else pd.Timedelta(0))
-    return df[end <= now]
-
-
-def merge_into_raw(path, new):
-    """ต่อท้ายไฟล์เดิม ไม่แก้แถวที่มีอยู่แล้ว (data/raw ห้ามแก้ย้อนหลัง) → (จำนวนแถวใหม่, แถวที่ค่าไม่ตรงของเดิม)"""
-    if path.exists():
-        old = pd.read_csv(path, parse_dates=["timestamp"])
-        both = old.merge(new, on="timestamp", suffixes=("", "_new"))
-        diff = int(sum((both[c] != both[f"{c}_new"]).sum() for c in ("close", "volume") if c in old))
-        added = new[~new["timestamp"].isin(old["timestamp"])]
-        out = pd.concat([old, added], ignore_index=True)
-    else:
-        added, diff, out = new, 0, new
-    out.sort_values("timestamp").to_csv(path, index=False, date_format="%Y-%m-%d %H:%M:%S")
-    return len(added), diff
-
-
-def measure_latency(market, symbol, rules, minutes, log_path, poll_sec=60):
-    """ดึงแท่งล่าสุดทุก poll_sec วินาที บันทึก: เวลาเครื่อง, timestamp แท่งล่าสุด, ความหน่วง, เวลาคำขอ"""
-    tz = rules["timezone"]
-    rows = []
-    for _ in range(minutes):
-        t0 = pd.Timestamp.now(tz=tz)
-        res = market.get_candlestick(symbol=symbol, interval="1m", limit=3, normalized=False)
-        t1 = pd.Timestamp.now(tz=tz)
-        last = candles_to_frame(res, rules)["timestamp"].max().tz_localize(tz)
-        row = {"requested_at": t0, "received_at": t1, "last_bar_timestamp": last,
-               "lag_sec": (t1 - last).total_seconds(), "request_sec": (t1 - t0).total_seconds()}
-        rows.append(row)
-        print(f"  {t1:%H:%M:%S}  แท่งล่าสุด {last:%H:%M}  ห่าง {row['lag_sec']:.0f} วิ  คำขอ {row['request_sec']:.2f} วิ")
-        pd.DataFrame([row]).to_csv(log_path, mode="a", header=not log_path.exists(), index=False)
-        time.sleep(max(0, poll_sec - (pd.Timestamp.now(tz=tz) - t0).total_seconds()))
-    return pd.DataFrame(rows)
+def fetch_last(market, symbol, rules, interval="1m", limit=5):
+    """แท่งล่าสุดไม่กี่แท่ง — ใช้วัดความหน่วง"""
+    return fetch_latest(market, symbol, interval, rules, limit)

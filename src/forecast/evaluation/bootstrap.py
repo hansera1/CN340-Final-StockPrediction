@@ -18,6 +18,9 @@ def block_bootstrap_diff(pred_a, pred_b, quantiles, metric, block_days=1, n_boot
     if m.empty:
         return None
     m["d"] = m[f"{metric}_a"] - m[f"{metric}_b"]
+    m = m.dropna(subset=["d"])            # ตัวชี้วัดที่ไม่นับบางแถว (เช่น err_nf ในวัน flat)
+    if m.empty:
+        return None
     daily = m.groupby("date")["d"].agg(["sum", "count"]).sort_index()
     s, c = daily["sum"].to_numpy(), daily["count"].to_numpy()
     n = len(daily)

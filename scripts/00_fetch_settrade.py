@@ -1,12 +1,12 @@
-"""ดึงแท่งรายนาทีจาก Settrade Open API → data/raw/<SYMBOL>_1min.csv
+"""ดึงแท่งราคาจาก Settrade Open API → data/raw/settrade/<SYMBOL>_<interval>.csv
 
 ตั้งรหัสใน .env ก่อน (คัดลอกจาก .env.example) — ห้าม commit / ห้ามวางรหัสในโค้ดหรือแชต
 
     python scripts/00_fetch_settrade.py --probe                      # ดู response ดิบ 1 วัน (ครั้งแรกควรรันก่อน)
-    python scripts/00_fetch_settrade.py --start 2024-01-01           # ดึงย้อนหลังถึงวันนี้ ต่อท้ายไฟล์เดิม
-    python scripts/00_fetch_settrade.py --start today                # วันจริง: ดึงข้อมูลวันนี้ก่อนรัน 05
+    python scripts/00_fetch_settrade.py --start 2026-10-26           # 1m ทีละวัน ต่อท้ายไฟล์เดิม
+    python scripts/00_fetch_settrade.py --start today                # วันจริง: ข้อมูลวันนี้
+    python scripts/00_fetch_settrade.py --interval 60m               # interval อื่น: ทั้งหมดที่ API ยังเก็บไว้
     python scripts/00_fetch_settrade.py --latency 30                 # วัดความหน่วง 30 นาที (ช่วงตลาดเปิด)
-    python scripts/00_fetch_settrade.py --interval 60m               # เก็บแท่งยาวกว่า → data/raw/<SYMBOL>_60m.csv
 
 ข้อจำกัดของ API (ตรวจ 29 ต.ค. 2026): 1m ย้อนได้ ~4 วันทำการ, 5m ~7 วัน, 15m ~1 เดือน, 60m ~3 เดือน, 1d ~3 ปี
 → ต้องรันทุกวันเพื่อสะสมรายนาที ข้อมูลที่หลุดช่วงไปแล้วดึงคืนไม่ได้
@@ -17,10 +17,12 @@ import time
 import _setup  # noqa: F401
 import pandas as pd
 
-from forecast.config import OUTPUT_DIR, RAW_DIR, load_rules
-from forecast.data.io import raw_path
-from forecast.data.settrade import (INTERVAL_MIN, candles_to_frame, connect, drop_unfinished,
-                                    fetch_day, fetch_latest, measure_latency, merge_into_raw)
+from forecast.config import INTERVAL_MIN, OUTPUT_DIR, load_rules, raw_source_dir
+from forecast.data.io import drop_unfinished, merge_into_raw, raw_path
+from forecast.data.latency import measure_latency, summarize_latency
+from forecast.data.settrade import candles_to_frame, connect, fetch_day, fetch_last, fetch_latest
+
+SOURCE = "settrade"
 
 
 def main():
@@ -37,7 +39,9 @@ def main():
     rules = load_rules()
     tz = rules["timezone"]
     symbols = args.symbols or rules["symbols"]
-    today = pd.Timestamp.now(tz=tz).tz_localize(None).normalize()
+    out_dir = raw_source_dir(rules, SOURCE)
+    now = lambda: pd.Timestamp.now(tz=tz).tz_localize(None)
+    today = now().normalize()
     day = lambda s: today if s == "today" else pd.Timestamp(s)
     market = connect()
 
@@ -53,28 +57,23 @@ def main():
 
     if args.latency:
         log = OUTPUT_DIR / "logs" / "latency.csv"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        lat = measure_latency(market, symbols[0], rules, args.latency, log)
-        print(f"\nความหน่วงสูงสุด {lat['lag_sec'].max():.0f} วิ, คำขอนานสุด {lat['request_sec'].max():.2f} วิ"
-              f" → บันทึก {log}")
-        print("ตั้ง cutoff = เวลาส่ง − (ความหน่วงสูงสุด + เวลารันโมเดล + เผื่อส่ง 5 นาที)")
+        lat = measure_latency(lambda: fetch_last(market, symbols[0], rules), rules, args.latency, log, SOURCE)
+        print(summarize_latency(lat), "→", log)
+        print("เสนอค่า c: python scripts/07_propose_cutoff.py")
         return
 
     if args.interval != "1m":
-        RAW_DIR.mkdir(parents=True, exist_ok=True)
-        now = pd.Timestamp.now(tz=tz).tz_localize(None)
         for sym in symbols:
-            new = drop_unfinished(fetch_latest(market, sym, args.interval, rules), rules, now,
+            new = drop_unfinished(fetch_latest(market, sym, args.interval, rules), rules, now(),
                                   INTERVAL_MIN[args.interval])
-            added, diff = merge_into_raw(RAW_DIR / f"{sym}_{args.interval}.csv", new)
+            added, diff = merge_into_raw(raw_path(sym, rules, out_dir, args.interval), new)
             print(f"  {sym} {args.interval}: {len(new)} แท่ง ({new['timestamp'].min()} → "
                   f"{new['timestamp'].max()}), เพิ่มใหม่ {added}" + (f", ⚠️ ค่าไม่ตรงของเดิม {diff}" if diff else ""))
         return
 
     if not args.start:
-        ap.error("ต้องระบุ --start (หรือ --probe / --latency)")
+        ap.error("ต้องระบุ --start (หรือ --probe / --latency / --interval)")
     dates = pd.bdate_range(day(args.start), day(args.end))
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
     for sym in symbols:
         frames, empty = [], 0
         for i, d in enumerate(dates, 1):
@@ -84,14 +83,12 @@ def main():
             frames.append(df)
             print(f"\r  {sym} {d.date()} ({i}/{len(dates)})", end="", flush=True)
             time.sleep(args.sleep)
-        new = pd.concat(frames, ignore_index=True)
-        new = drop_unfinished(new, rules, pd.Timestamp.now(tz=tz).tz_localize(None))
-        added, diff = merge_into_raw(raw_path(sym), new)
+        new = drop_unfinished(pd.concat(frames, ignore_index=True), rules, now(), 1)
+        added, diff = merge_into_raw(raw_path(sym, rules, out_dir, "1m"), new)
         print(f"\r  {sym}: ได้ {len(new)} แท่ง, เพิ่มใหม่ {added}, วันที่ไม่มีข้อมูล {empty}/{len(dates)}"
               + (f", ⚠️ ค่าไม่ตรงของเดิม {diff} จุด (เก็บของเดิมไว้)" if diff else ""))
         if len(new):
             print(f"      ข้อมูลเก่าสุดที่ได้: {new['timestamp'].min()}")
-    print("\nถัดไป: python scripts/01_check_data.py")
 
 
 if __name__ == "__main__":

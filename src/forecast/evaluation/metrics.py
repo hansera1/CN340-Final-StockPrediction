@@ -35,6 +35,16 @@ def row_losses(df, quantiles):
     out = pd.DataFrame(index=df.index)
     out["correct"] = ((p >= 0.5) == (y == 1)).astype(float)
     out["logloss"] = -(y * np.log(p) + (1 - y) * np.log(1 - p))
+    # ตัวชี้วัดหลักรอบที่ 2: อาจารย์ให้คะแนน "ขึ้นหรือลง" → วัน flat ไม่มีคำตอบที่ถูก
+    #   err_nf = ผิดทิศ เฉพาะวันไม่ flat (NaN ในวัน flat), err_fw = ผิดทิศ โดย flat นับผิดเสมอ
+    #   logloss_ud = log loss ของ P(ขึ้น) เทียบ ขึ้น vs ลง เฉพาะวันไม่ flat
+    d = df["direction"].to_numpy(float)
+    nf = np.isfinite(d) & (d != 0)
+    wrong = (np.where(p >= 0.5, 1.0, -1.0) != d).astype(float)
+    out["err_nf"] = np.where(nf, wrong, np.nan)
+    out["err_fw"] = wrong
+    yud = (d == 1).astype(float)
+    out["logloss_ud"] = np.where(nf, -(yud * np.log(p) + (1 - yud) * np.log(1 - p)), np.nan)
     out["brier"] = (p - y) ** 2
     out["abs_err_baht"] = (df["p_end"] - pred_price).abs()
     out["abs_err_ticks"] = out["abs_err_baht"] / tick_size(df["p_ref"])
@@ -72,6 +82,7 @@ def summarize(df, quantiles, by=("symbol", "session")):
             "acc_flat_excluded": (pred_dir[nonflat] == g.loc[nonflat, "direction"]).mean(),
             "balanced_accuracy": balanced_accuracy_score(y, g["p_up"] >= 0.5) if y.nunique() > 1 else np.nan,
             "logloss": l["logloss"].mean(),
+            "logloss_ud": l["logloss_ud"].mean(),
             "brier": l["brier"].mean(),
             "mae_baht": l["abs_err_baht"].mean(),
             "mae_ticks": l["abs_err_ticks"].mean(),

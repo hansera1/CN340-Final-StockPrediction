@@ -16,7 +16,7 @@ def test_future_data_does_not_change_features(rules, raw_dir, session, spectral)
 
     # บิดเบือนทุกแท่งหลังจุดตัด (ทั้งสองหุ้น)
     for sym in rules["symbols"]:
-        path = raw_dir / f"{sym}_1min.csv"
+        path = raw_dir / f"{sym}_1m.csv"
         df = pd.read_csv(path)
         ts = pd.to_datetime(df["timestamp"]).dt.tz_localize(rules["timezone"])
         after = ts > cutoff

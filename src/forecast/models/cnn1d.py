@@ -3,7 +3,10 @@
 - conv 2 ชั้น + dropout + weight decay + early stopping บน validation ที่อยู่หลังช่วง train
 - ฝึกหลาย seed ตามจำนวนที่กำหนดก่อน แล้วเฉลี่ย (ไม่เลือก seed ที่ดีที่สุด)
 - ให้เฉพาะ probability ทิศทาง; ช่วงราคาใช้ baseline เชิงประจักษ์
+- ฝึกบน GPU ถ้ามี (ตั้ง FORECAST_DEVICE=cpu เพื่อบังคับ CPU) แล้วย้ายกลับ CPU ก่อนเก็บ → ใช้บนเครื่องไม่มี GPU ได้
 """
+import os
+
 import numpy as np
 import torch
 from torch import nn
@@ -11,6 +14,10 @@ from torch import nn
 from forecast.features.sequences import N_CHANNELS
 from forecast.models.baseline import BaselineModel
 from forecast.models.common import as_frame, finite
+
+
+def train_device():
+    return torch.device(os.environ.get("FORECAST_DEVICE") or ("cuda" if torch.cuda.is_available() else "cpu"))
 
 
 class _Net(nn.Module):
@@ -36,7 +43,9 @@ class CNN1DModel:
 
     def _train_one(self, seed, xtr, ytr, xva, yva):
         torch.manual_seed(seed)
-        net = _Net()
+        dev = train_device()
+        net = _Net().to(dev)
+        xtr, ytr, xva, yva = (t.to(dev) for t in (xtr, ytr, xva, yva))
         opt = torch.optim.Adam(net.parameters(), lr=self.lr, weight_decay=self.wd)
         loss_fn = nn.BCEWithLogitsLoss()
         best, best_state, bad = np.inf, None, 0
@@ -57,7 +66,7 @@ class CNN1DModel:
                 if bad >= self.patience:
                     break
         net.load_state_dict(best_state)
-        return net.eval()
+        return net.cpu().eval()
 
     def fit(self, X, up, z, meta, seqs):
         self.base_ = BaselineModel(self.quantiles).fit(X, up, z)

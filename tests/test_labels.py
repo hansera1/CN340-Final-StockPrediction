@@ -42,7 +42,7 @@ def _start_stamped_day_with_auction(tmp_path):
         p = 152.0 if m >= pd.Timedelta("16:30:00") else 150.0   # ปลายช่วง = ต้นช่วง → flat
         rows.append((d + m, p, p, 100))
     df = pd.DataFrame(rows, columns=["timestamp", "open", "close", "volume"])
-    df.to_csv(tmp_path / "KBANK_1min.csv", index=False)
+    df.to_csv(tmp_path / "KBANK_1m.csv", index=False)
     return tmp_path
 
 
@@ -64,3 +64,22 @@ def test_start_timestamp_auction_and_flat(rules, tmp_path):
     rules["label"]["price_1630"] = "closing_auction"
     a = make_labels(bars, rules).set_index("session").loc["afternoon"]
     assert a["p_end"] == 152.0 and a["direction"] == 1
+
+
+def test_coarse_labels_use_daily_open_for_morning_start(rules, raw_dir, monkeypatch):
+    """ไฟล์หยาบ: P(10:00) = open รายวัน (ราคาประมูลเปิด) ไม่ใช่ open ของแท่งแรก; 1m ไม่ถูกแทน"""
+    import forecast.labels.make_labels as ml
+    bars = load_bars("KBANK", rules, raw_dir)
+    date = bars["date"].iloc[-1]
+    daily = raw_dir / "daily"
+    daily.mkdir()
+    pd.DataFrame({"timestamp": [date.tz_localize(None)], "open": [999.0]}).to_csv(daily / "KBANK_1d.csv", index=False)
+    monkeypatch.setattr(ml, "raw_source_dir", lambda r, src=None: daily)
+    r = {**rules, "data": {**rules["data"], "daily_open_sources": ["x"]}}
+
+    lab = ml.labels_for(bars, r, "60m").set_index(["date", "session"])
+    assert lab.loc[(date, "morning"), "p_start"] == 999.0
+    assert lab.loc[(date, "morning"), "p_start_source"] == "daily_open"
+    assert np.isclose(lab.loc[(date, "morning"), "r"], np.log(lab.loc[(date, "morning"), "p_end"] / 999.0))
+    assert lab.loc[(date, "afternoon"), "p_start_source"] == "bar"
+    assert ml.labels_for(bars, r, "1m").set_index(["date", "session"]).loc[(date, "morning"), "p_start"] != 999.0

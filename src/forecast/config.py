@@ -13,6 +13,19 @@ PROCESSED_DIR = DATA_DIR / "processed"
 OUTPUT_DIR = ROOT / "outputs"
 
 
+INTERVAL_MIN = {"1m": 1, "2m": 2, "3m": 3, "5m": 5, "10m": 10, "15m": 15, "30m": 30, "60m": 60,
+                "120m": 120, "240m": 240, "1d": 1440}
+
+
+def interval_minutes(interval):
+    return INTERVAL_MIN[interval]
+
+
+def raw_source_dir(rules, source=None):
+    """data/raw/<source>/ — source ตั้งต้นจาก rules.yaml → data.source"""
+    return RAW_DIR / (source or rules["data"]["source"])
+
+
 def load_yaml(name):
     with open(CONFIG_DIR / name, encoding="utf-8") as f:
         return yaml.safe_load(f)

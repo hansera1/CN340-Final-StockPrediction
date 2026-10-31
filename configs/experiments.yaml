@@ -1,9 +1,17 @@
 # ตารางจับคู่การทดลอง E0–E6 กับรหัสไอเดียเดิมของกลุ่ม (หัวข้อ 10)
 # variant แรกของแต่ละการทดลองคือ "ฐาน" — variant ถัดไปจะถูกเทียบกับฐานด้วย block bootstrap
 #
+# ข้อมูลตั้งต้น = rules.yaml → data (yfinance 60m ~2 ปี) ถ้าการทดลองไม่ได้ระบุ interval
+#
+# ตัวเลือกระดับการทดลอง:
+#   interval:          ไฟล์ดิบที่ใช้ทำ labels + features (เช่น 5m ซึ่ง yfinance มีแค่ 60 วัน)
+#   overlap_intervals: ใช้เฉพาะวันที่มีข้อมูลครบทุกความละเอียดในลิสต์ (ทุกหุ้น)
+#   evaluation:        ทับค่า walk-forward กลาง (ข้อมูลน้อยต้องลด min_train_days)
+#   pilot: true        ผลติดป้าย PILOT (summary.csv คอลัมน์ pilot + PILOT.txt) และห้ามล็อกเป็นโมเดลส่งจริง
+#
 # ตัวเลือกของ variant:
 #   model:           baseline | independent | cascade | cnn1d
-#   feature_minutes: ความละเอียดแท่งที่ใช้สร้าง features (labels ใช้ 1 นาทีเสมอ)
+#   feature_minutes: รวมแท่งเป็นกี่นาทีก่อนสร้าง features ภายในวัน (แบบ yfinance; labels ใช้ไฟล์ตาม interval)
 #   spectral:        เพิ่ม band power จาก Welch/STFT
 #   group_by:        [symbol, session] = แยกหุ้น/รอบ (หลัก), [session] = แชร์ข้อมูลข้ามหุ้น
 #   sessions:        จำกัดรอบ (เช่น CNN เริ่มที่รอบบ่าย)
@@ -25,20 +33,28 @@ E2:
   question: โมเดลสองขั้นช่วยจริงหรือไม่
   legacy: M5, แบบ C เทียบ B (แบบ D + M7)
   variants:
-    - {name: independent, model: independent}
+    - {name: independent, model: independent, reuse: E1}   # เหมือน E1 ทุกอย่าง → ใช้ผลซ้ำ ไม่ฝึกใหม่
     - {name: cascade, model: cascade}
 
 E3:
   question: ความละเอียด / ความใหม่มีผลอย่างไร
   legacy: D2, D6, D9
+  # labels เดียวกันจากแท่ง 5m; เปลี่ยนเฉพาะความละเอียดของ features; เทียบเฉพาะวันที่ซ้อนกันทุกความละเอียด (~60 วัน)
+  interval: 5m
+  overlap_intervals: [5m, 15m, 30m, 60m]
+  evaluation: {min_train_days: 30}
   variants:
-    - {name: res_1m, model: independent, feature_minutes: 1}
-    - {name: res_5m, model: independent, feature_minutes: 5}
+    - {name: res_60m, model: independent, feature_minutes: 60}
+    - {name: res_30m, model: independent, feature_minutes: 30}
     - {name: res_15m, model: independent, feature_minutes: 15}
+    - {name: res_5m, model: independent, feature_minutes: 5}
 
 E4:
   question: ลำดับข้อมูลช่วยหรือไม่
   legacy: C1, C2
+  pilot: true              # ลำดับต้องใช้แท่งละเอียด → yfinance 5m มีแค่ 60 วัน
+  interval: 5m
+  evaluation: {min_train_days: 30}
   variants:
     - {name: independent, model: independent, sessions: [afternoon]}
     - {name: cnn1d, model: cnn1d, sessions: [afternoon]}
@@ -46,6 +62,9 @@ E4:
 E5:
   question: เวลา–ความถี่ช่วยเหนือฐานหรือไม่
   legacy: C8
+  pilot: true              # band power ต้องใช้แท่งละเอียด → yfinance 5m มีแค่ 60 วัน
+  interval: 5m
+  evaluation: {min_train_days: 30}
   variants:
     - {name: independent, model: independent}
     - {name: spectral, model: independent, spectral: true}
@@ -54,7 +73,121 @@ E6:
   question: การแชร์ข้อมูลข้ามหุ้นช่วยเป้าหมายจริงหรือไม่
   legacy: D5
   variants:
-    - {name: per_symbol, model: independent, group_by: [symbol, session]}
+    - {name: independent, model: independent, reuse: E1}   # = per_symbol (แยกหุ้น/รอบ) ใช้ผล E1 ซ้ำ
     - {name: pooled, model: independent, group_by: [session]}
 
-# พักไว้จนกว่าจะมีเวลาและอาจารย์ยืนยัน: C3–C7, Chronos-2, stacking หลายชั้น
+E7:
+  question: ResNet18 pretrained (ImageNet, freeze) บนภาพจากแท่งก่อนจุดตัด ช่วยเหนือ E1 หรือไม่ — ขั้น 0
+  legacy: C3–C7 (CNN จากภาพ)
+  # walk-forward + ข้อมูล (60m ~2 ปี) ชุดเดียวกับ E1; ภาพ = 56 แท่งล่าสุดที่จบก่อนจุดตัด (~8 วัน)
+  # ไปขั้น 1 เมื่อขั้น 0 ชนะหรือใกล้เคียง E1 (CI ของ log loss ต่างจาก E1 ครอบ 0 หรือติดลบ)
+  variants:
+    - {name: independent, model: independent, reuse: E1}       # ตัวเทียบ (ผลจาก E1 ไม่ฝึกซ้ำ)
+    - {name: baseline, model: baseline, reuse: E0}
+    - {name: e7a_scalogram_s0, model: frozen_lr, image: scalogram}
+    - {name: e7b_candle_s0, model: frozen_lr, image: candlestick}
+
+E7s1:
+  question: E7 ขั้น 1 — หัวใหม่ (dropout + linear) บน backbone ที่ freeze ดีกว่าขั้น 0 หรือไม่
+  legacy: C3–C7
+  # รันเฉพาะ input ที่ผ่านเงื่อนไขขั้น 0; 5 seed รายงานค่าเฉลี่ยและช่วง
+  variants:
+    - {name: independent, model: independent, reuse: E1}
+    - {name: e7a_scalogram_s0, model: frozen_lr, reuse: E7}
+    - {name: e7b_candle_s0, model: frozen_lr, reuse: E7}
+    - {name: e7a_scalogram_s1, model: frozen_head, image: scalogram}
+    - {name: e7b_candle_s1, model: frozen_head, image: candlestick}
+
+# พักไว้จนกว่าจะมีเวลาและอาจารย์ยืนยัน: E7 ขั้น 2 (ปลด layer4), E8 Chronos-2, C3–C7 อื่น, stacking หลายชั้น
+
+# ---------------------------------------------------------------- รอบที่ 2 (NEXT_STEPS 30 ต.ค.)
+# เป้าหมายใหม่: ขึ้น vs ลง บนวันที่ไม่ flat (วัน flat ไม่มีคำตอบที่ถูก) ตัดสินด้วย P(ขึ้น) > 0.5
+# ตัวชี้วัดหลัก: err_nf / err_fw / logloss_ud (evaluation/metrics.py) — ตั้งค่าทั้งหมดก่อนดูผล
+
+e9_features: &e9_features
+  morning: [f_ret_1d, f_ret_5d, f_r_same_mean5, f_r_same_mean20, f_r_prev_afternoon, f_rv_5d]
+  afternoon: [f_ret_1d, f_ret_5d, f_r_same_mean5, f_r_same_mean20, f_r_prev_afternoon, f_rv_5d,
+              f_r_open_to_cut, f_gap_open, f_rv_intra]
+
+E9:
+  question: โมเดลตารางที่เล็กลง (pooled, features ~8–11 ตัว, regularize แรง) ชนะ E0 บนเป้าหมายขึ้น vs ลงหรือไม่
+  legacy: รอบที่ 2
+  # pooled สองหุ้น + ตัวแปรบอกหุ้น (f_sym_*) แยกเช้า/บ่าย; ราคาจุด z = 0, ช่วงราคา conformal × σ̂ (sig20)
+  variants:
+    - {name: baseline_ud, model: baseline, params: {target: updown}}   # E0 แบบขึ้น vs ลง (แยกหุ้น/รอบ)
+    - {name: lr, model: e9_lr, group_by: [session], features: *e9_features}
+    - {name: lrx, model: e9_lr, group_by: [session], features: *e9_features, params: {interaction: true}}
+    - {name: gbm, model: e9_gbm, group_by: [session], features: *e9_features}
+    - {name: ens, ensemble: [lr, gbm]}
+
+set50_extra: &set50_extra [PTT, AOT, DELTA, CPALL, GULF, SCB, BBL, KTB, PTTEP, BDMS, CPN, "TRUE", BH, SCC, MINT, CRC,
+                           TTB, OR, KTC, HMPRO]
+
+E10:
+  question: fine-tune ชั้น convolution ของ CNN pretrained (ไม่ใช่แค่หัว) ช่วยไหม และสถาปัตยกรรมไหนเหมาะกับภาพของเรา
+  legacy: C3–C7 (CNN จากภาพ), E7 ขั้น 2
+  # pooled 2 หุ้น (E10-2) แยกเช้า/บ่าย; ภาพ scalogram (E7a) จาก 56 แท่ง 60m ก่อนจุดตัด; ขึ้น vs ลง; 3 seed
+  # refit ทุก 20 วันทำการ (วันทดสอบชุดเดียวกับ E9 — เริ่มที่วันที่ 121 และกัน holdout 10 วันเหมือนกัน)
+  # ลำดับรัน: resnet18 s2 → s3 → densenet121 → inception_v3 → vgg16_bn → alexnet → E10-20 (ตัดจากท้ายถ้าไม่ทัน)
+  evaluation: {test_block_days: 20}
+  variants:
+    - {name: baseline_ud, model: baseline, reuse: E9}
+    - {name: resnet18_s2, model: finetune, image: scalogram, group_by: [session], params: {arch: resnet18, stage: s2}}
+    - {name: resnet18_s3, model: finetune, image: scalogram, group_by: [session], params: {arch: resnet18, stage: s3}}
+    - {name: resnet18_s0, model: finetune, image: scalogram, group_by: [session], params: {arch: resnet18, stage: s0}}
+    - {name: resnet18_s1, model: finetune, image: scalogram, group_by: [session], params: {arch: resnet18, stage: s1}}
+    - {name: densenet121_s0, model: finetune, image: scalogram, group_by: [session], params: {arch: densenet121, stage: s0}}
+    - {name: densenet121_s1, model: finetune, image: scalogram, group_by: [session], params: {arch: densenet121, stage: s1}}
+    - {name: densenet121_s2, model: finetune, image: scalogram, group_by: [session], params: {arch: densenet121, stage: s2}}
+    - {name: densenet121_s3, model: finetune, image: scalogram, group_by: [session], params: {arch: densenet121, stage: s3}}
+    - {name: inception_v3_s0, model: finetune, image: scalogram, group_by: [session], params: {arch: inception_v3, stage: s0}}
+    - {name: inception_v3_s1, model: finetune, image: scalogram, group_by: [session], params: {arch: inception_v3, stage: s1}}
+    - {name: inception_v3_s2, model: finetune, image: scalogram, group_by: [session], params: {arch: inception_v3, stage: s2}}
+    - {name: inception_v3_s3, model: finetune, image: scalogram, group_by: [session], params: {arch: inception_v3, stage: s3}}
+    - {name: vgg16_bn_s0, model: finetune, image: scalogram, group_by: [session], params: {arch: vgg16_bn, stage: s0}}
+    - {name: vgg16_bn_s1, model: finetune, image: scalogram, group_by: [session], params: {arch: vgg16_bn, stage: s1}}
+    - {name: vgg16_bn_s2, model: finetune, image: scalogram, group_by: [session], params: {arch: vgg16_bn, stage: s2}}
+    - {name: vgg16_bn_s3, model: finetune, image: scalogram, group_by: [session], params: {arch: vgg16_bn, stage: s3, gpu_cache_bytes: 0}}  # ไม่ cache ภาพบน GPU: VRAM ล้น (ผลเหมือนเดิม)
+    - {name: alexnet_s0, model: finetune, image: scalogram, group_by: [session], params: {arch: alexnet, stage: s0}}
+    - {name: alexnet_s1, model: finetune, image: scalogram, group_by: [session], params: {arch: alexnet, stage: s1}}
+    - {name: alexnet_s2, model: finetune, image: scalogram, group_by: [session], params: {arch: alexnet, stage: s2}}
+    - {name: alexnet_s3, model: finetune, image: scalogram, group_by: [session], params: {arch: alexnet, stage: s3}}
+    # E10-20 (ท้ายคิว — ใช้เวลามากสุด, ไม่ทันให้รายงานเฉพาะ E10-2): pooled หุ้นใหญ่ SET50 อีก 20 ตัว (yfinance 60m + open รายวัน Settrade แบบเดียวกัน) เป็นข้อมูลฝึกอย่างเดียว
+    - {name: resnet18_s2_x20, model: finetune, image: scalogram, group_by: [session], extra_symbols: *set50_extra,
+       params: {arch: resnet18, stage: s2}}
+    - {name: resnet18_s3_x20, model: finetune, image: scalogram, group_by: [session], extra_symbols: *set50_extra,
+       params: {arch: resnet18, stage: s3}}
+
+EZOO:
+  question: ภาคผนวก — โมเดลยอดนิยมแบบค่า default (ไม่จูน) บน feature / walk-forward เดียวกับ E9 (ไม่ใช้เลือกโมเดล)
+  legacy: model zoo รอบที่ 2
+  variants:
+    - {name: baseline_ud, model: baseline, reuse: E9}
+    - {name: xgb, model: e9_zoo, group_by: [session], features: *e9_features, params: {kind: xgb}}
+    - {name: cat, model: e9_zoo, group_by: [session], features: *e9_features, params: {kind: cat}}
+    - {name: rf, model: e9_zoo, group_by: [session], features: *e9_features, params: {kind: rf}}
+    - {name: svm_linear, model: e9_zoo, group_by: [session], features: *e9_features, params: {kind: svm_linear}}
+    - {name: svm_rbf, model: e9_zoo, group_by: [session], features: *e9_features, params: {kind: svm_rbf}}
+
+# ---------------------------------------------------------------- E9-FLAT (docs/NEXT_STEPS.md ข้อ 2)
+# Model A ทายโอกาสนิ่ง: รวมสองหุ้น + สองรอบในโมเดลเดียว (group_by: [] → ตัวแปรบอกหุ้น f_sym_* และบอกรอบ f_sess_*)
+# p_up ในไฟล์ผล = P(label = 1) ของเป้าหมายนั้น (เช่น P(นิ่ง)) — คิดคะแนนด้วย scripts/11_score_flat.py
+# baseline = สัดส่วนวันนิ่งในอดีตของ (หุ้น, รอบ) เดียวกัน; วันทดสอบตัดให้ตรงกับ E9 ตอนคิดคะแนน
+flat_dir_features: &flat_dir_features [fl_exp_ticks, fl_prev_range_ticks, fl_flat20_dir, fl_rv_intra,
+                                       fl_dow_0, fl_dow_1, fl_dow_2, fl_dow_3, fl_dow_4]
+flat_price_features: &flat_price_features [fl_exp_ticks, fl_prev_range_ticks, fl_flat20_price, fl_rv_intra,
+                                           fl_dow_0, fl_dow_1, fl_dow_2, fl_dow_3, fl_dow_4]
+
+E9FLAT:
+  question: ทายวันนิ่งล่วงหน้าได้ไหม และใช้ประโยชน์ได้ทั้งฝั่งทิศทาง (3 คำตอบ) และราคา (กฎค่ามัธยฐาน) หรือไม่
+  legacy: รอบที่ 2
+  custom_scoring: true     # summary / bootstrap มาตรฐานคิดจากเป้าหมาย "ขึ้น" ซึ่งไม่ตรงกับเป้าหมายนี้ → ข้าม
+  variants:
+    - {name: adir_base, model: baseline, params: {target: flat_dir}}
+    - {name: adir_lr, model: e9_lr, group_by: [], features: *flat_dir_features, params: {target: flat_dir}}
+    - {name: adir_gbm, model: e9_gbm, group_by: [], features: *flat_dir_features, params: {target: flat_dir}}
+    - {name: aprice_base, model: baseline, params: {target: flat_price}}
+    - {name: aprice_lr, model: e9_lr, group_by: [], features: *flat_price_features, params: {target: flat_price}}
+    - {name: aprice_gbm, model: e9_gbm, group_by: [], features: *flat_price_features, params: {target: flat_price}}
+    # p_price: ราคาปลาย > P(c) บนรอบที่ราคาปลาย ≠ P(c) — สเปก E9-LR (pooled หุ้น, แยกรอบ, features E9)
+    - {name: pprice_lr, model: e9_lr, group_by: [session], features: *e9_features, params: {target: price_updown}}

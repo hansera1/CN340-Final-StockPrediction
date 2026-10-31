@@ -1,6 +1,7 @@
 """ทำนายหนึ่งรอบของวันจริง
 
-1. ตัดข้อมูลดิบทุกอย่างที่หลังจุดตัดทิ้ง (as_of = cutoff) → เห็นอนาคตไม่ได้
+1. แท่ง = ประวัติไฟล์หลัก + แท่ง 1m วันนี้ (Settrade → yfinance) รวมเป็น data.interval แบบ yfinance
+   แล้วตัดทุกอย่างที่จบหลังจุดตัดทิ้ง (as_of = cutoff) → เห็นอนาคตไม่ได้ และไม่ใช้แท่งที่ยังไม่จบ
 2. สร้าง features ด้วยฟังก์ชันเดียวกับ backtest
 3. โหลด bundle ที่ล็อกแล้ว แล้วทำนาย
 4. ถ้าขั้นใดล้ม → baseline จากข้อมูลล่าสุดที่ผ่านเกณฑ์ พร้อมธง fallback
@@ -15,12 +16,13 @@ import pandas as pd
 
 from forecast.config import OUTPUT_DIR, load_experiments, quantile_cols, session_times, to_local
 from forecast.data.asof import last_close
-from forecast.data.io import load_bars, raw_path
+from forecast.data.io import raw_path
 from forecast.evaluation.metrics import round_to_tick
 from forecast.evaluation.runner import design_matrix, sequences_for
 from forecast.features.dataset import assemble_dataset
-from forecast.labels.make_labels import make_labels
+from forecast.labels.make_labels import labels_for
 from forecast.live.log_schema import PredictionLog
+from forecast.live.sources import live_bars
 from forecast.models.baseline import BaselineModel
 
 
@@ -36,34 +38,42 @@ def live_variant(rules):
 
 
 def _fallback(bars, rules, sess, date):
-    past = make_labels(bars, rules)
+    past = labels_for(bars, rules, rules["data"]["interval"])
     past = past[(past["session"] == sess) & (past["date"] < date)]
-    m = BaselineModel(rules["quantiles"]).fit(None, past["up"].to_numpy(), past["z"].to_numpy())
+    m = BaselineModel(rules["quantiles"], target=rules["live"].get("fallback_target", "up")).fit(
+        None, past["up"].to_numpy(), past["z"].to_numpy(), past)
     return m.predict(pd.DataFrame(index=[0])).iloc[0]
 
 
-def predict_session(session, date, rules, raw_dir=None, now=None):
+def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=None):
     date = to_local(date, rules).normalize()
     t = session_times(rules, session, date)
     now = to_local(now or datetime.now(), rules)
     as_of = min(t["cutoff"], now)
     mdir = model_dir(rules)
 
+    by_sym, metas = {}, {}
+    for sym in rules["symbols"]:
+        b, metas[sym] = live_bars(sym, rules, date, as_of, raw_dir, source_dirs)
+        by_sym[sym] = b[b["bar_end"] <= as_of].reset_index(drop=True)
+
     ds, err = None, None
     try:
         v = live_variant(rules)
-        ds = assemble_dataset(rules, raw_dir=raw_dir, as_of=as_of, live_row=(date, session),
-                              feature_minutes=v.get("feature_minutes", 1), spectral=v.get("spectral", False))
+        ds = assemble_dataset(rules, bars_by_symbol=by_sym, as_of=as_of, live_row=(date, session),
+                              feature_minutes=v.get("feature_minutes"), spectral=v.get("spectral", False))
     except Exception:
         err = "features: " + traceback.format_exc(limit=1).strip().splitlines()[-1]
 
     records = []
     for sym in rules["symbols"]:
-        bars = load_bars(sym, rules, raw_dir)
-        bars = bars[bars["bar_end"] <= as_of]
+        bars, meta = by_sym[sym], metas[sym]
+        # ราคาอ้างอิง = ราคาปิดของแท่งล่าสุดที่จบก่อนจุดตัด — นิยามเดียวกับ p_ref ใน labels ของ backtest
         p_ref, ref_time = last_close(bars, as_of)
-        received = datetime.fromtimestamp(raw_path(sym, raw_dir).stat().st_mtime)
+        received = datetime.fromtimestamp(raw_path(sym, rules, raw_dir).stat().st_mtime)
         reason, version, fver = err, "baseline", "n/a"
+        if session == "afternoon" and meta["source"] is None:
+            reason = reason or "ไม่มีแท่งวันนี้จากทุกแหล่ง: " + "; ".join(meta["skipped"])
 
         if session == "afternoon" and pd.notna(ref_time):
             age = (as_of - ref_time).total_seconds() / 60
@@ -99,5 +109,6 @@ def predict_session(session, date, rules, raw_dir=None, now=None):
             p_up=float(pred["p_up"]), direction="ขึ้น" if pred["p_up"] >= 0.5 else "ลง",
             z_quantiles={c: float(pred[c]) for c in qcols}, price_quantiles=prices,
             point_price=prices["q50"], fallback_reason=reason,
+            data_source=meta["source"], data_lag_sec=meta["lag_sec"],
         ))
     return records

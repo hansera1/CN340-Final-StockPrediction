@@ -1,0 +1,12 @@
+,afternoon,morning
+f_ret_1d,0.07416,0.01833
+f_ret_5d,0.10562,0.02228
+f_r_same_mean5,0.02809,0.00893
+f_r_same_mean20,0.03893,0.0181
+f_r_prev_afternoon,0.02601,0.01342
+f_rv_5d,0.04375,0.01937
+f_r_open_to_cut,0.05567,
+f_gap_open,0.02317,
+f_rv_intra,0.02631,
+f_sym_ADVANC,0.02254,0.00669
+f_sym_KBANK,0.00383,0.00155

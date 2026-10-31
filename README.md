@@ -23,7 +23,7 @@ kbank_advanc_forecast/
 │   └── feature_dictionary.csv   feature ทุกตัว + เวลาที่พร้อมใช้ + รอบที่ใช้ได้
 │
 ├── data/                     📦  ข้อมูล (ไม่แก้ไฟล์ดิบ)
-│   ├── raw/                     แท่งรายนาที <SYMBOL>_1min.csv  (_synthetic/ = ข้อมูลจำลอง)
+│   ├── raw/                     <source>/<SYMBOL>_<interval>.csv — yfinance/ (backtest 60m ~2 ปี), settrade/, _synthetic/
 │   ├── external/                ตลาดต่างประเทศ ค่าเงิน พันธบัตร ฟลอว์ ปฏิทิน (มี available_at)
 │   └── processed/               dataset ที่สร้างแล้ว (สร้างใหม่ได้เสมอ)
 │
@@ -37,14 +37,18 @@ kbank_advanc_forecast/
 │   └── live/                    ทำนายวันจริง · fallback · log
 │
 ├── scripts/                  ▶️  รันตามลำดับเลข
-│   ├── 00_fetch_settrade.py        ดึงแท่งรายนาทีจาก Settrade Open API (+ วัดความหน่วง)
+│   ├── 00_collect_daily.py         สะสมข้อมูลทุกวันหลัง 17:00 (Settrade + yfinance, ไม่ซ้ำ)
+│   ├── 00_fetch_yfinance.py        ดึงแท่ง 1d/60m/30m/15m/5m/1m จาก yfinance (+ วัดความหน่วง)
+│   ├── 00_fetch_settrade.py        ดึงแท่งจาก Settrade Open API (+ วัดความหน่วง)
 │   ├── 00_make_synthetic_data.py   ข้อมูลจำลองไว้ทดสอบ pipeline
 │   ├── 01_check_data.py            ตรวจคุณภาพ + จำนวนตัวอย่างจริง
+│   ├── 01b_validate_sources.py     yfinance 60m เทียบ Settrade 1m (ราคา label + features วันจริง)
 │   ├── 02_build_dataset.py         สร้าง dataset
 │   ├── 03_run_experiment.py        รัน E0–E6 + bootstrap
 │   ├── 04_lock_model.py            ล็อกวิธี ฝึกโมเดลสุดท้าย
 │   ├── 05_predict_live.py          ส่งจริง (เช้า/บ่าย)
-│   └── 06_score_live.py            ให้คะแนนหลังรู้ผล
+│   ├── 06_score_live.py            ให้คะแนนหลังรู้ผล
+│   └── 07_propose_cutoff.py        เสนอค่า c_เช้า / c_บ่าย จากความหน่วง + เวลารันที่วัดได้
 │
 ├── tests/                    ✅  ทดสอบการรั่วของอนาคต · labels · โมเดล
 │
@@ -77,10 +81,11 @@ python scripts/00_make_synthetic_data.py
 python scripts/03_run_experiment.py E0 E1 --raw-dir data/raw/_synthetic
 python -m pytest -q
 
-# 2) ข้อมูลจริง: คัดลอก .env.example เป็น .env แล้วกรอกรหัส Settrade (ห้าม commit)
-python scripts/00_fetch_settrade.py --probe            # ดู response ดิบก่อน
-python scripts/00_fetch_settrade.py --start 2024-01-01 # → data/raw/<SYMBOL>_1min.csv
+# 2) ข้อมูลจริง — backtest ใช้ yfinance 60m (~2 ปี); Settrade 1m ย้อนได้แค่ ~4 วันทำการ
+python scripts/00_fetch_yfinance.py                    # → data/raw/yfinance/<SYMBOL>_<interval>.csv
+python scripts/00_fetch_settrade.py --start today      # (ต้องมี .env) → data/raw/settrade/<SYMBOL>_1m.csv
 python scripts/01_check_data.py
+python scripts/01b_validate_sources.py                 # ยืนยันว่า 60m ตรงกับรายนาที
 python scripts/02_build_dataset.py
 python scripts/03_run_experiment.py E0 E1 E2
 

@@ -2,16 +2,17 @@
 
 | โฟลเดอร์ | เก็บอะไร | แก้ได้ไหม |
 |---|---|---|
-| `raw/` | แท่งรายนาที `<SYMBOL>_1min.csv` จากแหล่งข้อมูล | ❌ ห้ามแก้ — เพิ่มข้อมูลใหม่ต่อท้ายเท่านั้น |
+| `raw/yfinance/` | `<SYMBOL>_<interval>.csv` จาก `00_fetch_yfinance.py` — **60m คือข้อมูลหลักของ backtest** | ❌ ห้ามแก้ — ต่อท้ายเท่านั้น |
+| `raw/settrade/` | `<SYMBOL>_<interval>.csv` จาก `00_fetch_settrade.py` — 1m ใช้ในวันจริง | ❌ ห้ามแก้ — ต่อท้ายเท่านั้น |
 | `raw/_synthetic/` | ข้อมูลจำลองจาก `00_make_synthetic_data.py` | ใช้ทดสอบ pipeline เท่านั้น |
 | `external/` | ข้อมูลเสริม (ต่างประเทศ ค่าเงิน พันธบัตร ฟลอว์ ปฏิทิน) | เพิ่มไฟล์ได้ |
 | `processed/` | dataset ที่สร้างแล้ว | ลบได้ — สร้างใหม่ด้วย `02_build_dataset.py` |
 
-## รูปแบบ `raw/<SYMBOL>_1min.csv`
+## รูปแบบ `raw/<source>/<SYMBOL>_<interval>.csv`
 
 | คอลัมน์ | จำเป็น | หมายเหตุ |
 |---|---|---|
-| `timestamp` | ✅ | เวลาไทย; ระบุใน `rules.yaml → bar_timestamp` ว่าเป็นเวลาเริ่มหรือจบแท่ง |
+| `timestamp` | ✅ | เวลาไทย, **เวลาเริ่มแท่ง** (ทั้ง Settrade และ yfinance — `rules.yaml → bar_timestamp`) |
 | `close` | ✅ | |
 | `volume` | ✅ | ต้องเป็นรายนาที ไม่ใช่ยอดสะสม (`01_check_data.py` ตรวจให้) |
 | `open`, `high`, `low` | แนะนำ | ไม่มี `open` → P(10:00)/P(14:00) ใช้ราคาแรกหลังเวลาเริ่ม |
@@ -19,7 +20,7 @@
 
 ```csv
 timestamp,open,high,low,close,volume
-2026-10-28 10:01:00,152.0,152.5,151.5,152.5,120400
+2026-10-28 10:00:00,152.0,152.5,151.5,152.5,120400
 ```
 
 ## รูปแบบ `external/<ชื่อ>.csv`

@@ -1,0 +1,15 @@
+session,value,n,param
+afternoon,0.003,600,C
+afternoon,0.1,282,C
+afternoon,0.01,80,C
+afternoon,0.03,30,C
+morning,0.003,880,C
+morning,0.01,268,C
+morning,0.03,40,C
+morning,0.1,10,C
+afternoon,100.0,402,min_data_in_leaf
+afternoon,50.0,350,min_data_in_leaf
+afternoon,30.0,240,min_data_in_leaf
+morning,100.0,458,min_data_in_leaf
+morning,50.0,380,min_data_in_leaf
+morning,30.0,360,min_data_in_leaf

@@ -1,7 +1,7 @@
 """สร้างข้อมูลจำลอง (ไม่ใช่ข้อมูลจริง) ไว้ทดสอบว่า pipeline รันครบ ก่อนได้ไฟล์จริง
 
     python scripts/00_make_synthetic_data.py
-    → data/raw/_synthetic/KBANK_1min.csv, ADVANC_1min.csv
+    → data/raw/_synthetic/KBANK_1m.csv, ADVANC_1m.csv
 """
 import argparse
 
@@ -41,8 +41,8 @@ def main():
     rng = np.random.default_rng(0)
     for sym in START_PRICE:
         df = make_symbol(sym, days, rng)
-        df.to_csv(out / f"{sym}_1min.csv", index=False, float_format="%.4f")
-        print(f"{sym}: {len(df):,} แท่ง, {len(days)} วัน → {out / f'{sym}_1min.csv'}")
+        df.to_csv(out / f"{sym}_1m.csv", index=False, float_format="%.4f")
+        print(f"{sym}: {len(df):,} แท่ง, {len(days)} วัน → {out / f'{sym}_1m.csv'}")
 
 
 if __name__ == "__main__":

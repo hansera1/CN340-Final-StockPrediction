@@ -1,6 +1,7 @@
 import pandas as pd
 
-from forecast.data.settrade import candles_to_frame, drop_unfinished, merge_into_raw
+from forecast.data.io import drop_unfinished, merge_into_raw
+from forecast.data.settrade import candles_to_frame
 
 
 def test_candles_and_merge(rules, tmp_path):
@@ -12,10 +13,10 @@ def test_candles_and_merge(rules, tmp_path):
 
     # ดึง ณ 10:02:30: แบบ start แท่ง 10:02 (จบ 10:03) ยังไม่จบ; แบบ end แท่ง 10:02 จบแล้ว
     now = pd.Timestamp("2026-10-28 10:02:30")
-    assert len(drop_unfinished(df, {**rules, "bar_timestamp": "start"}, now)) == 2
-    assert len(drop_unfinished(df, {**rules, "bar_timestamp": "end"}, now)) == 3
+    assert len(drop_unfinished(df, {**rules, "bar_timestamp": "start"}, now, 1)) == 2
+    assert len(drop_unfinished(df, {**rules, "bar_timestamp": "end"}, now, 1)) == 3
 
-    path = tmp_path / "X_1min.csv"
+    path = tmp_path / "X_1m.csv"
     assert merge_into_raw(path, df.iloc[:2]) == (2, 0)
     changed = df.copy()
     changed.loc[0, "close"] = 9.0
