@@ -25,13 +25,21 @@ def variant_interval(rules, exp, variant):
     return variant.get("interval") or exp.get("interval") or rules["data"]["interval"]
 
 
+def label_tag(rules):
+    """ชื่อ cache ของนิยาม label ที่ไม่ใช่ค่าเดิม (รอบที่ 4: ราคาปิดทางการ / ATC) — ไม่ปนกับ cache เดิม"""
+    lab = rules["label"]
+    return (("_pcoff" if lab.get("p_ref_morning", "last_bar_close") == "official_close" else "") +
+            ("_atc" if lab["price_1630"] == "closing_auction" else ""))
+
+
 def load_or_build_dataset(rules, feature_minutes=None, spectral=False, raw_dir=None, rebuild=False,
-                          interval=None):
+                          interval=None, as_of=None, tag=""):
+    """as_of: ตัดข้อมูลดิบหลังเวลานี้ (สร้างใหม่ให้ได้แถวเดียวกับช่วง walk-forward เดิม) · tag ต่อท้ายชื่อ cache"""
     interval = interval or rules["data"]["interval"]
     # แยก cache ตามแหล่ง/ความละเอียด (ข้อมูลจำลองไม่ปนข้อมูลจริง)
     source = raw_dir.name.strip("_") if raw_dir else rules["data"]["source"]
     fm = f"_f{feature_minutes}m" if feature_minutes else ""
-    name = f"dataset_{source}_{interval}{fm}{'_spectral' if spectral else ''}.pkl"
+    name = f"dataset_{source}_{interval}{fm}{'_spectral' if spectral else ''}{label_tag(rules)}{tag}.pkl"
     path = PROCESSED_DIR / name
     if path.exists() and not rebuild:
         ds = pd.read_pickle(path)
@@ -46,7 +54,7 @@ def load_or_build_dataset(rules, feature_minutes=None, spectral=False, raw_dir=N
             ds = add_cn340_features(ds, bars, rules, None if raw_dir is None else raw_dir / "_none")
         return ds.reset_index(drop=True)
     ds = assemble_dataset(rules, raw_dir=raw_dir, feature_minutes=feature_minutes, spectral=spectral,
-                          interval=interval)
+                          interval=interval, as_of=as_of)
     path.parent.mkdir(parents=True, exist_ok=True)
     ds.to_pickle(path)
     return ds

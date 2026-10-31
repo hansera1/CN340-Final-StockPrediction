@@ -3,15 +3,20 @@
 รูปแบบไฟล์: available_at (เวลาที่ค่าเผยแพร่/ได้รับจริง, Asia/Bangkok) + คอลัมน์ตัวเลข
 เช่น us.csv: available_at, spx_ret, ndx_ret
 แต่ละแถวของ dataset จะได้ค่าล่าสุดที่ available_at <= cutoff_ts เท่านั้น
+calendar.csv (วันหยุด / XD) ไม่ใช่ feature → ข้าม
 """
 import pandas as pd
 
 from forecast.config import EXTERNAL_DIR
 
+NOT_FEATURES = {"calendar"}
+
 
 def load_external(rules, ext_dir=None):
     tables = {}
     for path in sorted((ext_dir or EXTERNAL_DIR).glob("*.csv")):
+        if path.stem in NOT_FEATURES:
+            continue
         df = pd.read_csv(path)
         ts = pd.to_datetime(df["available_at"])
         tz = rules["timezone"]

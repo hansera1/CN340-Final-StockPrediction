@@ -1,0 +1,9 @@
+﻿date,symbol,source,ohlc_1d_match,volume_ratio,bars_60m_match,bars_60m
+2026-10-27,KBANK,รวมจาก Settrade 1m (close = ATC),True,0.9996655094263373,7,7
+2026-10-27,ADVANC,รวมจาก Settrade 1m (close = ATC),True,0.992299407331773,7,7
+2026-10-28,KBANK,รวมจาก Settrade 1m (close = ATC),True,0.9995451911428058,7,7
+2026-10-28,ADVANC,รวมจาก Settrade 1m (close = ATC),True,0.789812188579355,7,7
+2026-10-29,KBANK,รวมจาก Settrade 1m (close = ATC),True,1.0,7,7
+2026-10-29,ADVANC,รวมจาก Settrade 1m (close = ATC),True,1.0,7,7
+2026-10-30,KBANK,รวมจาก Settrade 1m (close = ATC),True,0.9995096264197829,7,7
+2026-10-30,ADVANC,รวมจาก Settrade 1m (close = ATC),True,0.9868093435417942,7,7

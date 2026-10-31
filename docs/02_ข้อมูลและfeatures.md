@@ -6,7 +6,7 @@
 
 | ชุดข้อมูล | หน้าที่ | วางไฟล์ที่ |
 |---|---|---|
-| KBANK / ADVANC รายชั่วโมง | **หลักของ backtest**: yfinance 60m ~2 ปี (ราคา label ตรงกับ Settrade 1m 32/32 จุด) | `data/raw/yfinance/<SYMBOL>_60m.csv` |
+| KBANK / ADVANC รายชั่วโมง | **หลักของ backtest**: yfinance 60m ~3 ปี ตั้งแต่ 24/10/2023 (730 วันทำการ; ขาด 02/01/2024 และ 02/02/2026 ทั้งสองหุ้น) (ราคา label ตรงกับ Settrade 1m 32/32 จุด) | `data/raw/yfinance/<SYMBOL>_60m.csv` |
 | KBANK / ADVANC 5m–30m | E3–E5 (yfinance มีแค่ 60 วัน → E4/E5 เป็น pilot) | `data/raw/yfinance/<SYMBOL>_5m.csv` ฯลฯ |
 | KBANK / ADVANC รายนาที | วันจริง: Settrade → yfinance สำรอง, รวมเป็น 60m ด้วย `aggregate_bars` | `data/raw/<settrade\|yfinance>/<SYMBOL>_1m.csv` |
 | ราคา ณ เวลาเป้าหมาย | สร้างคำตอบ 10:00, 12:30, 14:00, 16:30 | คำนวณจากไฟล์รายนาที |

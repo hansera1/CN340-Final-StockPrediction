@@ -5,7 +5,7 @@ timezone: Asia/Bangkok
 symbols: [KBANK, ADVANC]
 
 # ข้อมูลดิบ: data/raw/<source>/<SYMBOL>_<interval>.csv
-# Settrade 1m ย้อนได้แค่ ~4 วันทำการ → backtest ใช้ yfinance 60m (~2 ปี) ซึ่งตรวจแล้วว่าราคา label ตรงกับ Settrade
+# Settrade 1m ย้อนได้แค่ ~4 วันทำการ → backtest ใช้ yfinance 60m (~3 ปี ตั้งแต่ 24/10/2023, 730 วันทำการ, ขาด 02/01/2024 และ 02/02/2026) ซึ่งตรวจแล้วว่าราคา label ตรงกับ Settrade
 data:
   source: yfinance           # โฟลเดอร์ใต้ data/raw/
   interval: 60m              # ความละเอียดของไฟล์หลัก (labels + features)
@@ -34,7 +34,12 @@ label:
   #   last_trade_at_or_before = ราคาซื้อขายล่าสุด ณ/ก่อน 16:30 (สิ้นสุด continuous)
   #   closing_auction         = ราคาปิดประมูล (ATC, แท่งหลัง 16:30)
   price_1630: last_trade_at_or_before
+  #   closing_auction ใช้ราคาปิดทางการของวันนั้นจาก Settrade 1d (ไฟล์ 60m ไม่มีแท่งประมูลปิด) → cache แยก (_atc)
+  #   โมเดลสำรองของนิยามนี้: outputs/models/R4ATC/ (ใช้เฉพาะเมื่ออาจารย์ตอบว่า 16:30 = ATC)
   store_closing_auction: true    # เก็บราคาปิดประมูลเป็นคอลัมน์ p_close_auction ไว้สลับได้โดยไม่ต้องดึงข้อมูลใหม่
+  # P(c) รอบเช้าของ label z / features fl_* / โมเดลราคา (NEXT_STEPS รอบที่ 4 ข้อ 4)
+  #   last_bar_close = ราคาปิดแท่ง 60m ล่าสุด (เดิม) | official_close = ราคาปิดทางการรวม ATC ของวันทำการก่อน (= วันจริง)
+  p_ref_morning: official_close   # T4 ผ่าน (results/round4/t4_price_official_pref.csv) → ใช้ตั้งแต่ 1 พ.ย.
   flat:
     definition: exact_equal      # ชั่วคราว: ปลายช่วง = ต้นช่วงพอดี (ต่าง 0 tick) | within_ticks (ใช้คู่กับ ticks)
     ticks: 0                     # ใช้เมื่อ definition = within_ticks
@@ -64,8 +69,39 @@ live:
   price_eq: E9FLAT/aprice_lr # P(ราคาปลาย = P(c))
   price_up: E9FLAT/pprice_lr # P(ราคาปลาย > P(c) | ไม่เท่า) → กฎค่ามัธยฐาน
   shadow: E9/baseline_ud     # รันเงา E0-ud + ช่วงราคา quantile ของ z
+  flat_dir: E9FLAT/adir_lr   # P(นิ่ง) สำหรับกฎ 3 คำตอบ (ใช้เฉพาะเมื่อ three_way.enabled)
+  # ข้อ 1ข: ส่ง "เท่าเดิม" ได้ → argmax ของ (1 − f)·p, f, (1 − f)·(1 − p) — เปิดเฉพาะเมื่ออาจารย์อนุญาตและ T1 ผ่าน
+  three_way: {enabled: false}
+  model_dir: ""              # "" = outputs/models/<spec> · "R4ATC" = ชุดที่ฝึกด้วย label 16:30 = ATC (ใช้คู่ label.price_1630)
   max_price_age_min: 30    # สำหรับรอบบ่าย: ราคา P(c) ต้องไม่เก่ากว่านี้
   # แท่ง 1m ของ "วันนี้" ในวันจริง: ลองตามลำดับ แล้วรวมเป็น data.interval ด้วย aggregate_bars (แบบ yfinance)
-  # Settrade ยังไม่มีสิทธิ์ market data → yfinance 1m เป็นสำรอง
+  # Settrade = แหล่งหลัก (บัญชีมีสิทธิ์ market data แล้ว) · yfinance = สำรองเท่านั้น (ช้าได้ 15–20 นาที
+  # ซึ่งเกิน max_bar_lag_min → ถ้า Settrade ล้ม รอบบ่ายมักไม่มีข้อมูลวันนี้)
   sources: [settrade, yfinance]
   max_bar_lag_min: 5       # แท่งล่าสุดของแหล่งต้องจบไม่เกินกี่นาทีก่อนจุดตัด ไม่งั้นลองแหล่งถัดไป
+  # ราคาจุดต้องสอดคล้องกับทิศทาง (ข้อ 1ง — เปิดเฉพาะเมื่ออาจารย์กำหนด):
+  #   P(ขึ้น) > 0.5 + margin → P(c) + 1 ช่อง · P(ขึ้น) < 0.5 − margin → P(c) − 1 ช่อง
+  #   นอกนั้นใช้กฎค่ามัธยฐาน แต่ถ้ากฎเลื่อนสวนทิศทาง → P(c)
+  price_consistency: {enabled: false, margin: 0.05}
+  # ข้อมูลรายวันของวันทำการก่อนยังไม่มา (ข้อ 3): ดึงซ้ำ → สร้างจากแหล่งสำรอง → ส่งด้วยข้อมูลล่าสุดที่มี
+  daily_check:
+    refetch_attempts: 2      # ขั้น 2: ดึงซ้ำกี่ครั้ง
+    refetch_wait_sec: 20
+    final_margin_min: 5      # ขั้น 4: ถ้ายังไม่มี ส่งเมื่อเหลือเวลาก่อนเส้นตายเท่านี้ (วนดึงซ้ำจนถึงตอนนั้น)
+
+# ไฟล์ส่ง (ข้อ 1จ) — เปลี่ยนตามรูปแบบที่อาจารย์กำหนดได้ที่นี่ที่เดียว
+submission:
+  dir: outputs/predictions
+  filename: "{date}_{session}.csv"   # {date} = YYYY-MM-DD, {session} = morning / afternoon, {session_th} = เช้า / บ่าย
+  # คอลัมน์ที่ส่ง (ชื่อในไฟล์: ชื่อภายใน) — ชื่อภายในดู COLUMNS ใน scripts/05_predict_live.py
+  columns:
+    วันที่: date
+    รอบ: session_th
+    หุ้น: symbol
+    ทิศทาง: direction
+    P(ขึ้น): p_up
+    ราคาคาด: q50
+    ช่วง 50%: band50
+    ช่วง 80%: band80
+  # คอลัมน์ตรวจสอบ (ไม่ส่ง) → ไฟล์ <ชื่อไฟล์>_detail.csv ข้างกัน
+  detail: true

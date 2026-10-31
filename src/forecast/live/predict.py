@@ -13,6 +13,9 @@ P(c)    รอบบ่าย = ราคาซื้อขายล่าสุ
 3. Fallback: ข้อมูลวันนี้ไม่ทัน → ยังรันโมเดลทิศทาง ด้วย features จากข้อมูลล่าสุดที่ผ่านเกณฑ์ (ระบุอายุข้อมูล)
    baseline E0-ud เป็นทางสุดท้ายเมื่อโมเดลรันไม่ได้เลย · บันทึก fallback_reason ทุกครั้ง
 4. รันเงา (shadow): E0-ud + ราคาล่าสุด ณ จุดตัด — แยก log ห้ามส่ง ถ้าล้มระบบหลักทำงานต่อ
+5. ข้อมูลรายวันของวันทำการก่อนไม่มา (live/daily_check.py): 05_predict_live.py ส่ง data_root = สำเนาข้อมูลที่เติมแถวสำรอง
+   และ extra_reasons = ขั้นที่ใช้ → ต่อท้าย fallback_reason
+6. live.price_consistency (ปิดไว้): ราคาจุดตามทิศของโมเดลทิศทางเมื่อมั่นใจพอ (ข้อ 1ง)
 """
 import pickle
 import traceback
@@ -22,7 +25,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-from forecast.config import OUTPUT_DIR, RAW_DIR, quantile_cols, session_times, to_local
+from forecast.config import EXTERNAL_DIR, OUTPUT_DIR, RAW_DIR, quantile_cols, session_times, to_local
 from forecast.data.asof import last_close
 from forecast.data.io import raw_path
 from forecast.evaluation.metrics import round_to_tick, tick_size
@@ -35,7 +38,7 @@ from forecast.models.baseline import BaselineModel
 
 
 def bundle_dir(spec):
-    """'E9/lrx' → outputs/models/E9/lrx"""
+    """'E9/lrx' → outputs/models/E9/lrx ('R4ATC/E9/lrx' → outputs/models/R4ATC/E9/lrx)"""
     return OUTPUT_DIR / "models" / spec
 
 
@@ -79,12 +82,26 @@ def official_close(sym, date, rules, daily_dir=None):
     return np.nan, pd.NaT, None
 
 
+def xd_dividend(sym, date):
+    """เงินปันผลต่อหุ้นถ้า date เป็นวัน XD ของหุ้นนี้ (data/external/calendar.csv) ไม่งั้น None"""
+    path = EXTERNAL_DIR / "calendar.csv"
+    if not path.exists():
+        return None
+    cal = pd.read_csv(path, parse_dates=["date"])
+    m = (cal["event"] == "XD") & (cal["symbol"] == sym) & (cal["date"] == pd.Timestamp(date).tz_localize(None).normalize())
+    return float(cal.loc[m, "amount"].sum()) if m.any() else None
+
+
 def reference_price(sym, session, date, as_of, bars, meta, rules, daily_dir=None):
-    """P(c) → (ราคา, เวลา, แหล่ง, เหตุผลถ้าใช้ทางสำรอง)"""
+    """P(c) → (ราคา, เวลา, แหล่ง, เหตุผลถ้าใช้ทางสำรอง / ปรับ XD)"""
     if session == "morning":
         p, t, src = official_close(sym, date, rules, daily_dir)
         prev_day = bars.loc[bars["date"] < date, "date"].max() if len(bars) else pd.NaT
         if src and pd.notna(prev_day) and pd.Timestamp(t).normalize() == prev_day.tz_localize(None).normalize():
+            div = xd_dividend(sym, date)
+            if div:   # ข้อ 5: วัน XD → ราคาปิดเมื่อวาน − เงินปันผล ปัดช่องราคา
+                adj = float(round_to_tick(p - div))
+                return adj, t, f"{src} − XD", f"วัน XD: P(c) = {p:g} − ปันผล {div:g} = {adj:g}"
             return p, t, src, None
         p60, t60 = last_close(bars, as_of)
         why = "ไม่มีราคาปิดทางการของวันทำการก่อน" if not src else f"ราคาปิดทางการล่าสุดเป็นของ {pd.Timestamp(t):%d/%m}"
@@ -106,9 +123,31 @@ def median_rule(p_ref, p_eq, p_price):
     return p_ref + shift * tick, up, dn
 
 
-def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=None, daily_dir=None):
-    """→ (records ที่ส่งจริง, shadow records)"""
-    live = rules["live"]
+def consistent_point(p_ref, rule_point, p_up, margin):
+    """ข้อ 1ง: P(ขึ้น) > 0.5 + margin → P(c) + 1 ช่อง, < 0.5 − margin → P(c) − 1 ช่อง
+    นอกนั้นใช้ราคาจากกฎค่ามัธยฐาน ยกเว้นกฎเลื่อนสวนทิศทาง → P(c)"""
+    tick = float(tick_size(p_ref))
+    if p_up > 0.5 + margin:
+        return p_ref + tick
+    if p_up < 0.5 - margin:
+        return p_ref - tick
+    against = (rule_point - p_ref) * (1 if p_up >= 0.5 else -1) < 0
+    return p_ref if against else rule_point
+
+
+def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=None, daily_dir=None,
+                    data_root=None, extra_reasons=None):
+    """→ (records ที่ส่งจริง, shadow records)
+    data_root: โฟลเดอร์แทน data/raw (มี settrade/, yfinance/) — ใช้กับสำเนาข้อมูลสำรองและการซ้อม
+    extra_reasons: {หุ้น: [ข้อความ]} ต่อท้าย fallback_reason (ขั้น fallback ของข้อมูลรายวัน)"""
+    live = dict(rules["live"])
+    if live.get("model_dir"):   # ชุดโมเดลสำรอง เช่น R4ATC (label 16:30 = ATC)
+        for k in ["direction", "price_eq", "price_up", "shadow", "flat_dir"]:
+            live[k] = f"{live['model_dir']}/{live[k]}"
+    if data_root is not None:
+        raw_dir = data_root / rules["data"]["source"]
+        source_dirs = {s: data_root / s for s in live["sources"]}
+        daily_dir = data_root
     date = to_local(date, rules).normalize()
     t = session_times(rules, session, date)
     now = to_local(now or datetime.now(), rules)
@@ -122,14 +161,15 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
 
     ds, feat_err = None, None
     try:
-        ds = assemble_dataset(rules, bars_by_symbol=by_sym, as_of=as_of, live_row=(date, session))
+        ds = assemble_dataset(rules, bars_by_symbol=by_sym, as_of=as_of, live_row=(date, session),
+                              daily_dir=daily_dir)
     except Exception:
         feat_err = _err("features")
 
     records, shadows = [], []
     for sym in rules["symbols"]:
         bars, meta = by_sym[sym], metas[sym]
-        reasons = [feat_err] if feat_err else []
+        reasons = ([feat_err] if feat_err else []) + list((extra_reasons or {}).get(sym, []))
         p_ref, ref_time, ref_src, why = reference_price(sym, session, date, as_of, bars, meta, rules, daily_dir)
         if why:
             reasons.append(why)
@@ -159,6 +199,13 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
         if pred is None:
             pred = _baseline(bars, rules, session, date)
         p_up = float(pred["p_up"])
+        direction = "ขึ้น" if p_up >= 0.5 else "ลง"
+        if (live.get("three_way") or {}).get("enabled") and ds is not None:
+            try:   # ข้อ 1ข: กฎ 3 คำตอบ
+                f = float(predict_bundle(live["flat_dir"], sym, session, ds, date)[0]["p_up"])
+                direction = ["ขึ้น", "เท่าเดิม", "ลง"][int(np.argmax([(1 - f) * p_up, f, (1 - f) * (1 - p_up)]))]
+            except Exception:
+                reasons.append(_err("flat model") + " → ทิศทางขึ้น/ลง")
 
         # ราคา: กฎค่ามัธยฐาน → ถ้าโมเดลราคาล้ม ใช้ P(c)
         p_eq = p_price = p_hi = p_lo = None
@@ -170,6 +217,9 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
                 point, p_hi, p_lo = median_rule(p_ref, p_eq, p_price)
             except Exception:
                 reasons.append(_err("price model") + " → ราคาจุด = P(c)")
+        pc = live.get("price_consistency") or {}
+        if pc.get("enabled"):
+            point = consistent_point(p_ref, point, p_up, pc["margin"])
 
         # ช่วงราคา: quantile ของ z (E0) รอบราคาจุด
         try:
@@ -187,7 +237,7 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
                 raw_path(sym, rules, raw_dir).stat().st_mtime)),
             generated_at=str(datetime.now()), submitted_at=None, model_version=version, feature_version=fver,
             reference_price=p_ref, reference_time=str(ref_time), reference_source=ref_src,
-            p_up=p_up, direction="ขึ้น" if p_up >= 0.5 else "ลง",
+            p_up=p_up, direction=direction,
             z_quantiles={c: float(np.log(prices[c] / p_ref)) for c in qcols}, price_quantiles=prices,
             point_price=prices["q50"], p_eq=p_eq, p_price=p_price, p_higher=p_hi, p_lower=p_lo,
             fallback_reason="; ".join(reasons) or None,

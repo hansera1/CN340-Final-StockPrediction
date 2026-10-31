@@ -5,7 +5,8 @@ from forecast.config import session_times
 from forecast.data.io import aggregate_bars, load_bars
 from forecast.features.build import build_features
 from forecast.features.external import asof_join, load_external
-from forecast.labels.make_labels import labels_for
+from forecast.data.asof import last_close
+from forecast.labels.make_labels import apply_official_close, daily_closes, labels_for
 
 KEYS = ["date", "symbol", "session"]
 
@@ -85,27 +86,33 @@ def excluded_cols(df, rules):
 
 
 def assemble_dataset(rules, raw_dir=None, ext_dir=None, feature_minutes=None, spectral=False,
-                     as_of=None, live_row=None, interval=None, bars_by_symbol=None):
+                     as_of=None, live_row=None, interval=None, bars_by_symbol=None, daily_dir=None):
     """interval: ไฟล์ดิบที่ใช้ (default = rules.yaml → data.interval)
     feature_minutes: รวมแท่งเป็นกี่นาทีก่อนคำนวณ features ภายในวัน (None = ใช้แท่งตามไฟล์)
     as_of: ตัดข้อมูลดิบทุกอย่างหลังเวลานี้ทิ้งก่อนเริ่ม (ใช้ในวันจริง)
     live_row: (date, session) ที่ยังไม่รู้ผล ให้เพิ่มเป็นแถวที่ไม่มี label
     bars_by_symbol: แท่งที่เตรียมไว้แล้ว (วันจริง: ประวัติ 60m + แท่ง 1m วันนี้ที่รวมแล้ว) แทนการอ่านไฟล์
+    daily_dir: โฟลเดอร์ที่มี settrade/ และ yfinance/ ของแท่งรายวัน (None = data/raw; ข้อมูลจำลอง = ไม่มี)
     """
+    if daily_dir is None and raw_dir is not None:
+        daily_dir = raw_dir / "_none"
     per_symbol, used_bars = {}, {}
     for sym in rules["symbols"]:
         bars = bars_by_symbol[sym] if bars_by_symbol else load_bars(sym, rules, raw_dir, interval)
         if as_of is not None:
             bars = bars[bars["bar_end"] <= as_of].reset_index(drop=True)
         used_bars[sym] = bars
-        labels = labels_for(bars, rules, interval or rules["data"]["interval"])
+        labels = labels_for(bars, rules, interval or rules["data"]["interval"], daily_dir)
         if live_row is not None:
+            # แถวที่ยังไม่รู้ผลต้องมี P(c) นิยามเดียวกับ backtest (fl_* ของโมเดลราคาใช้ค่านี้)
             date, sess = live_row
             labels = labels[labels["date"] < date]
             t = session_times(rules, sess, date)
-            labels = pd.concat([labels, pd.DataFrame([{
-                "date": date, "symbol": sym, "session": sess, "cutoff_ts": t["cutoff"]}])],
-                ignore_index=True)
+            p_ref, ref_time = last_close(bars, t["cutoff"])
+            row = pd.DataFrame([{"date": date, "symbol": sym, "session": sess, "cutoff_ts": t["cutoff"],
+                                 "p_ref": p_ref, "ref_time": ref_time}])
+            row = apply_official_close(row, rules, daily_closes(sym, daily_dir), [*bars["date"].unique(), date])
+            labels = pd.concat([labels, row], ignore_index=True)
         fb = aggregate_bars(bars, feature_minutes, rules) if feature_minutes else bars
         feats = build_features(bars, labels, rules, feature_bars=fb, spectral=spectral)
         per_symbol[sym] = labels.merge(feats.drop(columns="cutoff_ts"), on=["date", "session"], how="left")
@@ -132,4 +139,4 @@ def assemble_dataset(rules, raw_dir=None, ext_dir=None, feature_minutes=None, sp
     ds = add_flat_features(add_sigma(ds), used_bars, rules)
     # E12 (สูตร CN340): ไฟล์รายวันอยู่ใต้ data/raw จริงเท่านั้น — ข้อมูลจำลอง (raw_dir) ไม่มี fd_
     from forecast.features.cn340 import add_cn340_features
-    return add_cn340_features(ds, used_bars, rules, None if raw_dir is None else raw_dir / "_none").reset_index(drop=True)
+    return add_cn340_features(ds, used_bars, rules, daily_dir).reset_index(drop=True)

@@ -11,12 +11,15 @@ P(10:00), P(14:00) = open ของแท่งแรกของภาค (แ�
 P(ปลายช่วง) = ราคาปิดของแท่งสุดท้ายที่จบ ณ/ก่อนเวลาปลายช่วง (1m: แท่ง ≤ 12:29 / ≤ 16:29) ไม่รวมแท่งประมูลปิด
     นาทีที่ไม่มีการซื้อขายไม่มีแท่ง → ใช้ "แท่งล่าสุดที่ ≤ เวลานั้น" เสมอ
 p_close_auction = ราคาปิดของแท่งสุดท้ายหลัง 16:30 (ถ้าไฟล์มีรายการประมูลปิด)
+P(c) = ราคาปิดแท่งล่าสุดที่จบ ณ/ก่อนจุดตัด · label.p_ref_morning = official_close → รอบเช้าใช้ราคาปิดทางการ
+    (รวม ATC, Settrade 1d) ของวันทำการก่อนแทน ให้ตรงกับวันจริง (NEXT_STEPS รอบที่ 4 ข้อ 4)
+label.price_1630 = closing_auction → P(16:30) = ราคาปิดทางการของวันนั้น (ไฟล์ 60m ไม่มีแท่งประมูลปิด)
 flat = |P(ปลาย) − P(เริ่ม)| ≤ label.flat.ticks ช่องราคา (exact_equal = 0 ช่อง)
 """
 import numpy as np
 import pandas as pd
 
-from forecast.config import raw_source_dir, session_times, to_local
+from forecast.config import RAW_DIR, raw_source_dir, session_times, to_local
 from forecast.data.asof import last_close
 from forecast.evaluation.metrics import tick_size
 
@@ -108,19 +111,62 @@ def daily_opens(symbol, rules):
     return opens
 
 
-def labels_for(bars, rules, interval):
+def daily_closes(symbol, daily_dir=None):
+    """ราคาปิดทางการ (รวม ATC) รายวันจาก <daily_dir>/settrade/<SYM>_1d.csv → Series ดัชนีวันที่ไม่มี tz (ไม่มีไฟล์ → None)"""
+    path = (daily_dir or RAW_DIR) / "settrade" / f"{symbol}_1d.csv"
+    if not path.exists():
+        return None
+    d = pd.read_csv(path, parse_dates=["timestamp"])
+    s = pd.Series(d["close"].to_numpy(float), index=d["timestamp"].dt.normalize())
+    return s[~s.index.duplicated(keep="last")].sort_index()
+
+
+def apply_official_close(lab, rules, closes, trading_days):
+    """label.p_ref_morning / label.price_1630 ที่อิงราคาปิดทางการ — คิดจากวันที่อย่างเดียว เรียกซ้ำได้ผลเดิม
+    trading_days: วันทำการที่มีแท่ง (วันทำการก่อน = วันล่าสุดในนี้ที่ < วันที่ทาย)
+    ไม่มีราคาปิดทางการของวันทำการก่อน → คงราคาปิดแท่งล่าสุด (p_ref_source = bar)"""
+    lab = lab.copy()
+    if "p_ref_source" not in lab:
+        lab["p_ref_source"] = "bar"
+    if closes is None or lab.empty:
+        return lab
+    lab_rules = rules["label"]
+    day = lab["date"].dt.tz_localize(None).dt.normalize()
+    if lab_rules.get("p_ref_morning", "last_bar_close") == "official_close":
+        days = pd.DatetimeIndex(sorted(set(pd.DatetimeIndex(trading_days).tz_localize(None).normalize())))
+        m = (lab["session"] == "morning").to_numpy()
+        i = days.searchsorted(day[m], side="left") - 1
+        prev = pd.Series(days[np.clip(i, 0, None)], index=lab.index[m]).where(i >= 0)
+        p = prev.map(closes)
+        use = p.notna()
+        idx = p.index[use]
+        lab.loc[idx, "p_ref"] = p[use]
+        lab.loc[idx, "ref_time"] = (prev[use] + pd.Timedelta(hours=16, minutes=30)).dt.tz_localize(rules["timezone"])
+        lab.loc[idx, "p_ref_source"] = "official_close"
+    elif lab_rules.get("p_ref_morning", "last_bar_close") != "last_bar_close":
+        raise ValueError(f"label.p_ref_morning ไม่รู้จัก: {lab_rules['p_ref_morning']}")
+    if lab_rules["price_1630"] == "closing_auction":
+        pm = lab["session"] == "afternoon"
+        lab.loc[pm, "p_end"] = day[pm].map(closes)
+    return lab
+
+
+def labels_for(bars, rules, interval, daily_dir=None):
     """labels ของไฟล์ตาม interval — ถ้าไม่ใช่ 1m ใช้ open รายวันเป็น P(10:00) แทน open ของแท่งหยาบ
-    (yfinance 60m: open แท่ง 10:00 = ราคา ณ 10:00 ไม่ใช่ราคาประมูลเปิด ต่างกัน 1 tick ใน 3/8 วันที่ตรวจ)"""
+    (yfinance 60m: open แท่ง 10:00 = ราคา ณ 10:00 ไม่ใช่ราคาประมูลเปิด ต่างกัน 1 tick ใน 3/8 วันที่ตรวจ)
+    daily_dir: โฟลเดอร์ที่มี settrade/<SYM>_1d.csv สำหรับราคาปิดทางการ (None = data/raw)"""
     lab = make_labels(bars, rules)
     lab["p_start_source"] = "bar"
-    if interval == "1m" or lab.empty:
+    if lab.empty:
         return lab
+    lab = apply_official_close(lab, rules, daily_closes(bars["symbol"].iat[0], daily_dir), bars["date"].unique())
+    if interval == "1m":
+        return finalize_labels(lab, rules)
     opens = daily_opens(bars["symbol"].iat[0], rules)
-    if opens is None:
-        return lab
-    morning = lab["session"] == "morning"
-    o = lab["date"].dt.tz_localize(None).map(opens)
-    use = morning & o.notna()
-    lab.loc[use, "p_start"] = o[use]
-    lab.loc[use, "p_start_source"] = "daily_open"
+    if opens is not None:
+        morning = lab["session"] == "morning"
+        o = lab["date"].dt.tz_localize(None).map(opens)
+        use = morning & o.notna()
+        lab.loc[use, "p_start"] = o[use]
+        lab.loc[use, "p_start_source"] = "daily_open"
     return finalize_labels(lab, rules)

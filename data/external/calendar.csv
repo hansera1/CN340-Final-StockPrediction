@@ -1,0 +1,71 @@
+date,symbol,event,amount,source
+2023-12-05,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2023-12-11,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2023-12-29,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-01-01,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-02-19,ADVANC,XD,4.61,yfinance dividends (ex-date)
+2024-02-26,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-04-08,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-04-12,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-04-15,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-04-16,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-04-22,KBANK,XD,6.0,yfinance dividends (ex-date)
+2024-05-01,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-05-06,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-05-22,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-06-03,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-07-22,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-07-29,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-08-12,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-08-19,ADVANC,XD,4.87,yfinance dividends (ex-date)
+2024-09-11,KBANK,XD,1.5,yfinance dividends (ex-date)
+2024-10-14,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-10-23,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-12-05,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-12-10,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2024-12-31,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-01-01,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-02-12,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-02-20,ADVANC,XD,5.74,yfinance dividends (ex-date)
+2025-04-07,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-04-14,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-04-15,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-04-17,KBANK,XD,8.0,yfinance dividends (ex-date)
+2025-05-01,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-05-05,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-05-12,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-05-15,KBANK,XD,2.5,yfinance dividends (ex-date)
+2025-06-02,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-06-03,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-07-10,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-07-28,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-08-11,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-08-12,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-08-19,ADVANC,XD,6.89,yfinance dividends (ex-date)
+2025-09-10,KBANK,XD,2.0,yfinance dividends (ex-date)
+2025-10-13,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-10-23,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-12-05,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-12-10,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2025-12-31,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-01-01,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-01-02,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-02-27,ADVANC,XD,27.41,yfinance dividends (ex-date)
+2026-03-03,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-04-06,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-04-13,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-04-14,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-04-15,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-04-21,KBANK,XD,12.0,yfinance dividends (ex-date)
+2026-05-01,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-05-04,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-06-01,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-06-03,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-07-28,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-07-29,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-08-12,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-08-19,ADVANC,XD,8.69,yfinance dividends (ex-date)
+2026-09-09,KBANK,XD,2.0,yfinance dividends (ex-date)
+2026-10-13,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-10-16,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d
+2026-10-23,ALL,holiday,,weekday ที่ไม่มีแท่ง Settrade 1d

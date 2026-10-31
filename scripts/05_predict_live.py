@@ -3,12 +3,18 @@
     python scripts/05_predict_live.py morning
     python scripts/05_predict_live.py afternoon
     (ทดสอบย้อนหลัง: --date 2026-10-28 --now "2026-10-28 12:15" --no-fetch)
+    (ซ้อมกับสำเนาข้อมูล: --data-root <โฟลเดอร์ที่มี settrade/ yfinance/> --no-fetch --now ...)
 
 ก่อนทำนายจะดึงข้อมูลให้เอง (ปิดด้วย --no-fetch):
   - yfinance 60m 5 วันล่าสุด → ประวัติถึงเมื่อวาน; Settrade 1d → P(10:00) ของวันก่อน ๆ (ราคาประมูลเปิด)
-  - แท่ง 1m วันนี้ทุกแหล่งใน live.sources (Settrade, yfinance) — แหล่งที่ล้มจะถูกข้าม
+  - แท่ง 1m วันนี้ทุกแหล่งใน live.sources (Settrade หลัก, yfinance สำรอง) — แหล่งที่ล้มจะถูกข้าม
 
-→ outputs/predictions/<วันที่>_<รอบ>.csv  (ไฟล์ส่งอาจารย์)
+ก่อนทำนายตรวจข้อมูลรายวันของวันทำการก่อน (live/daily_check.py — ข้อ 3 รอบที่ 4):
+  ขั้น 2 ดึงซ้ำ → ขั้น 3 สร้างจากแหล่งสำรองลง outputs/live_cache/ → ขั้น 4 วนดึงซ้ำจนเหลือ final_margin_min
+  ก่อนเส้นตาย แล้วส่งด้วยข้อมูลล่าสุดที่มี · ทุกขั้นได้ไฟล์ส่ง และพิมพ์คำเตือนตัวใหญ่
+
+→ <submission.dir>/<submission.filename>  (ไฟล์ส่งอาจารย์ — รูปแบบใน rules.yaml → submission)
+→ <ไฟล์ส่ง>_detail.csv                      (คอลัมน์ตรวจสอบ ไม่ส่ง)
 → outputs/logs/predictions.jsonl            (log ก่อนรู้ผล ห้ามแก้)
 → outputs/logs/shadow_log.jsonl             (รันเงา E0-ud + ราคาล่าสุด — ห้ามส่ง ใช้เทียบในรายงานเท่านั้น)
 """
@@ -20,22 +26,36 @@ from pathlib import Path
 import _setup  # noqa: F401
 import pandas as pd
 
-from forecast.config import INTERVAL_MIN, OUTPUT_DIR, load_rules, raw_source_dir
+from forecast.config import INTERVAL_MIN, OUTPUT_DIR, RAW_DIR, ROOT, load_rules, raw_source_dir, session_times
 from forecast.data.io import drop_unfinished, merge_into_raw, raw_path
+from forecast.live.daily_check import build_fallback_root, missing_daily, prev_trading_day
 from forecast.live.log_schema import append_log
 from forecast.live.predict import predict_session
 
 SESSION_TH = {"morning": "เช้า", "afternoon": "บ่าย"}
 
+COLUMNS = {   # ชื่อภายในของคอลัมน์ไฟล์ส่ง (rules.yaml → submission.columns)
+    "date": lambda r, p: r.date, "session": lambda r, p: r.session, "session_th": lambda r, p: SESSION_TH[r.session],
+    "symbol": lambda r, p: r.symbol, "direction": lambda r, p: r.direction, "p_up": lambda r, p: round(r.p_up, 3),
+    "q10": lambda r, p: p["q10"], "q25": lambda r, p: p["q25"], "q50": lambda r, p: p["q50"],
+    "q75": lambda r, p: p["q75"], "q90": lambda r, p: p["q90"],
+    "band50": lambda r, p: f"{p['q25']:.2f}–{p['q75']:.2f}", "band80": lambda r, p: f"{p['q10']:.2f}–{p['q90']:.2f}",
+}
 
-def fetch_today(rules):
+
+def warn(lines):
+    bar = "!" * 78
+    print(f"\n{bar}\n" + "\n".join(f"!!  {x}" for x in lines) + f"\n{bar}\n", flush=True)
+
+
+def fetch_today(rules, today=True):
     tz = rules["timezone"]
     now = lambda: pd.Timestamp.now(tz=tz).tz_localize(None)
     iv = rules["data"]["interval"]
     jobs = {f"yfinance {iv}": lambda sym: ("yfinance", iv, _yf(sym, iv, "5d", rules)),
             "settrade 1d": lambda sym: ("settrade", "1d", _settrade_latest(sym, "1d", rules)),   # P(c) รอบเช้า
             "yfinance 1d": lambda sym: ("yfinance", "1d", _yf(sym, "1d", "5d", rules))}          # สำรองของ Settrade 1d
-    for src in rules["live"]["sources"]:
+    for src in rules["live"]["sources"] if today else []:
         if src == "settrade":
             jobs["settrade 1m"] = lambda sym: ("settrade", "1m", _settrade_today(sym, rules))
         elif src == "yfinance":
@@ -77,30 +97,95 @@ def _settrade_latest(sym, interval, rules):
     return fetch_latest(_settrade(), sym, interval, rules, limit=10)
 
 
+def fetch_prev_day(rules, day):
+    """ขั้น 2: ดึงข้อมูลรายวัน + 60m ซ้ำ และ Settrade 1m ของวันทำการก่อน (ใช้สร้างแท่งสำรองในขั้น 3)"""
+    fetch_today(rules, today=False)
+    for sym in rules["symbols"]:
+        try:
+            from forecast.data.settrade import fetch_day
+            df = fetch_day(_settrade(), sym, day, rules)
+            added, _ = merge_into_raw(raw_path(sym, rules, raw_source_dir(rules, "settrade"), "1m"), df)
+            print(f"  ดึง settrade 1m {sym} {day:%d/%m}: +{added} แท่ง")
+        except BaseException as e:
+            print(f"  ดึง settrade 1m {sym} {day:%d/%m}: ล้ม ({type(e).__name__}: {str(e)[:80]})")
+
+
+def ensure_daily(rules, args, date, session):
+    """ข้อ 3 → (data_root หรือ None = data/raw, {หุ้น: [เหตุผล]})"""
+    cfg = rules["live"]["daily_check"]
+    src_root = args.data_root or RAW_DIR
+    day = prev_trading_day(date)
+    missing = missing_daily(rules, day, src_root)
+    if not missing:
+        print(f"ข้อมูลของวันทำการก่อน ({day:%d/%m}) ครบ: settrade 1d + yfinance 60m")
+        return args.data_root, {}
+    warn([f"ขั้น 1: ข้อมูลของวันทำการก่อน ({day:%d/%m}) ยังไม่มี — " +
+          "; ".join(f"{s}: {', '.join(m)}" for s, m in missing.items())])
+    fetching = not args.no_fetch and args.data_root is None
+    for i in range(cfg["refetch_attempts"] if fetching else 0):
+        print(f"ขั้น 2: ดึงซ้ำครั้งที่ {i + 1}")
+        fetch_prev_day(rules, day)
+        missing = missing_daily(rules, day, src_root)
+        if not missing:
+            warn([f"ขั้น 2: ดึงซ้ำแล้วได้ข้อมูลของ {day:%d/%m} ครบ"])
+            return args.data_root, {}
+        time.sleep(cfg["refetch_wait_sec"])
+    out_root = OUTPUT_DIR / "live_cache" / f"{date:%Y-%m-%d}_{session}"
+    give_up = session_times(rules, session, date)["deadline"] - pd.Timedelta(minutes=cfg["final_margin_min"])
+    while True:
+        notes = build_fallback_root(rules, missing, day, out_root, src_root)
+        left = missing_daily(rules, day, out_root)
+        if not left:
+            warn(["ขั้น 3: สร้างแท่งของวันทำการก่อนจากแหล่งสำรอง (ไม่แก้ data/raw)"] +
+                 [f"{s}: {n}" for s, ns in notes.items() for n in ns] + [f"สำเนาข้อมูล: {out_root}"])
+            return out_root, {s: [f"ข้อมูลรายวันขั้น 3: {n}" for n in ns] for s, ns in notes.items()}
+        if not fetching or pd.Timestamp.now(tz=rules["timezone"]) >= give_up:
+            break
+        print(f"ขั้น 4: ยังไม่ครบ ({left}) — ดึงซ้ำอีกครั้ง (รอได้ถึง {give_up:%H:%M})")
+        time.sleep(cfg["refetch_wait_sec"])
+        fetch_prev_day(rules, day)
+        missing = missing_daily(rules, day, src_root)
+        if not missing:
+            warn([f"ขั้น 4: ดึงซ้ำแล้วได้ข้อมูลของ {day:%d/%m} ครบ"])
+            return args.data_root, {}
+    warn([f"ขั้น 4: ยังไม่มีข้อมูลของ {day:%d/%m} → ทำนายด้วย fd_lr บนข้อมูลล่าสุดที่มี — ตรวจ fallback_reason"] +
+         [f"{s}: {n}" for s, ns in notes.items() for n in ns])
+    reasons = {s: [f"ข้อมูลรายวันขั้น 4: ไม่มี {', '.join(m)} ของ {day:%d/%m} → ใช้ข้อมูลล่าสุดที่มี"]
+               for s, m in left.items()}
+    for s, ns in notes.items():   # แถวที่สร้างได้บางส่วนยังใช้ (เช่น 60m ได้ แต่ 1d ไม่ได้)
+        reasons.setdefault(s, []).extend(f"ข้อมูลรายวันขั้น 3: {n}" for n in ns if "ไม่ได้" not in n)
+    return out_root, reasons
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("session", choices=["morning", "afternoon"])
     ap.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"))
     ap.add_argument("--now", help="จำลองเวลาปัจจุบัน (ทดสอบย้อนหลัง)")
-    ap.add_argument("--raw-dir", type=Path)
+    ap.add_argument("--data-root", type=Path, help="โฟลเดอร์แทน data/raw (มี settrade/ yfinance/) — ใช้ซ้อม")
     ap.add_argument("--no-fetch", action="store_true", help="ไม่ดึงข้อมูลใหม่ ใช้ไฟล์ที่มีอยู่")
     args = ap.parse_args()
     rules = load_rules()
     t0 = time.perf_counter()
-    if not args.no_fetch and not args.raw_dir:
+    if not args.no_fetch and args.data_root is None:
         fetch_today(rules)
+    date = pd.Timestamp(args.date)
+    data_root, extra = ensure_daily(rules, args, date, args.session)
 
-    records, shadows = predict_session(args.session, args.date, rules, args.raw_dir, now=args.now)
+    records, shadows = predict_session(args.session, args.date, rules, now=args.now, data_root=data_root,
+                                       extra_reasons=extra)
     # จำลองเวลา (--now) = ทดสอบย้อนหลัง/ซ้อม → log แยก ไม่ปนกับ log ส่งจริง
     logdir = OUTPUT_DIR / "logs" / ("dryrun" if args.now else "")
     for sh in shadows:
         append_log(logdir / "shadow_log.jsonl", sh)
-    rows = []
+    sub = rules["submission"]
+    rows, detail = [], []
     for r in records:
         r.submitted_at = str(datetime.now())
         append_log(logdir / "predictions.jsonl", r)
         p = r.price_quantiles
-        rows.append({
+        rows.append({name: COLUMNS[key](r, p) for name, key in sub["columns"].items()})
+        detail.append({
             "วันที่": r.date, "รอบ": SESSION_TH[r.session], "หุ้น": r.symbol,
             "ทิศทาง": r.direction, "P(ขึ้น)": round(r.p_up, 3),
             "ราคาคาด": p["q50"], "ช่วง 50%": f"{p['q25']:.2f}–{p['q75']:.2f}",
@@ -113,10 +198,15 @@ def main():
             "fallback": r.fallback_reason or "",
         })
 
-    table = pd.DataFrame(rows)
-    out = OUTPUT_DIR / "predictions" / ("dryrun" if args.now else "") / f"{args.date}_{args.session}.csv"
+    table, detail = pd.DataFrame(rows), pd.DataFrame(detail)
+    name = sub["filename"].format(date=args.date, session=args.session, session_th=SESSION_TH[args.session])
+    out = ROOT / sub["dir"] / ("dryrun" if args.now else "") / name
     out.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(out, index=False, encoding="utf-8-sig")
+    if sub.get("detail"):
+        detail.to_csv(out.with_name(out.stem + "_detail.csv"), index=False, encoding="utf-8-sig")
+    print(detail.to_string(index=False))
+    print("\nไฟล์ส่ง:")
     print(table.to_string(index=False))
     print(f"\n→ {out}")
     run_sec = time.perf_counter() - t0
@@ -124,8 +214,14 @@ def main():
     pd.DataFrame([{"session": args.session, "date": args.date, "started": datetime.now(), "run_sec": run_sec,
                    "fetched": not args.no_fetch}]).to_csv(log, mode="a", header=not log.exists(), index=False)
     print(f"ใช้เวลา {run_sec:.1f} วินาที (ดึงข้อมูล + ทำนาย) → {log}")
-    if table["fallback"].astype(bool).any():
-        print("⚠ มีรายการที่ใช้ทางสำรอง — ตรวจสาเหตุในคอลัมน์ fallback")
+    deadline = session_times(rules, args.session, date)["deadline"]
+    done = (pd.Timestamp(args.now).tz_localize(rules["timezone"]) + pd.Timedelta(seconds=run_sec) if args.now
+            else pd.Timestamp.now(tz=rules["timezone"]))
+    print(f"ได้ไฟล์ส่ง {done:%H:%M:%S} — ก่อนเส้นตาย {deadline:%H:%M} อยู่ {(deadline - done).total_seconds() / 60:.1f} นาที"
+          + (" (เวลาจำลอง + เวลารันจริง)" if args.now else ""))
+    if detail["fallback"].astype(bool).any():
+        warn(["มีรายการที่ใช้ทางสำรอง — ตรวจทุกบรรทัดในคอลัมน์ fallback ก่อนส่ง"] +
+             [f"{x['หุ้น']}: {x['fallback']}" for _, x in detail.iterrows() if x["fallback"]])
     print(f"รันเงา {len(shadows)} รายการ → {logdir / 'shadow_log.jsonl'} (ไม่ส่ง)")
 
 

@@ -1,7 +1,11 @@
 """ให้คะแนนคำทำนายจริงหลังรู้ผล (เย็นทุกวัน และสรุปสัปดาห์ 14 พ.ย.)
 
     python scripts/06_score_live.py [--raw-dir ...]
-    → outputs/reports/live_scored.csv, live_summary.csv
+    → outputs/reports/live_scored.csv, live_summary.csv, live_direction_rules.csv
+
+ข้อ 1ก รอบที่ 4: คะแนนทิศทางที่ส่งจริง (คอลัมน์ direction ใน log รวม "เท่าเดิม" ถ้าเปิดกฎ 3 คำตอบ) ตามกติกาวัน flat ทุกแบบ
+  flat_as_wrong = วัน flat ผิดเสมอ · flat_as_correct = วัน flat ถูกเสมอ · flat_excluded = ไม่นับวัน flat
+  exact_3state = ต้องตรง 3 สถานะ (ใช้เมื่อส่ง "เท่าเดิม" ได้)
 """
 import argparse
 from pathlib import Path
@@ -44,6 +48,7 @@ def main():
     logs["date"] = pd.to_datetime(logs["date"]).dt.tz_localize(rules["timezone"])
     zq = pd.json_normalize(logs["z_quantiles"]).set_index(logs.index)
     preds = logs[["date", "symbol", "session", "p_up", "model_version", "fallback_reason"]].join(zq)
+    preds["answer"] = logs["direction"].map({"ขึ้น": 1, "ลง": -1, "เท่าเดิม": 0})
     preds["p_ref"] = logs["reference_price"]
 
     labels = pd.concat([score_labels(s, rules, args.raw_dir) for s in rules["symbols"]])
@@ -61,6 +66,18 @@ def main():
         s.to_csv(out / "live_summary.csv", index=False)
         print(s[["group", "n", "n_flat", "acc_flat_as_wrong", "acc_flat_excluded", "logloss", "mae_baht", "mae_naive_baht",
                  "coverage50", "coverage80"]].round(4).to_string(index=False))
+        rows = []
+        for key, g in [(("ALL", "ALL"), done), *done.groupby(["symbol", "session"])]:
+            hit, flat = (g["answer"] == g["direction"]), g["direction"] == 0
+            rows.append({"symbol": key[0], "session": key[1], "n": len(g), "n_flat": int(flat.sum()),
+                         "n_answer_flat": int((g["answer"] == 0).sum()),
+                         "acc_flat_as_wrong": (hit & ~flat).mean(), "acc_flat_as_correct": (hit | flat).mean(),
+                         "acc_flat_excluded": hit[~flat].mean(), "acc_exact_3state": hit.mean(),
+                         "n_correct_exact": int(hit.sum())})
+        t = pd.DataFrame(rows)
+        t.to_csv(out / "live_direction_rules.csv", index=False, encoding="utf-8-sig")
+        print("\nทิศทางที่ส่งจริง ตามกติกาวัน flat (ใช้แบบที่อาจารย์กำหนด):")
+        print(t.round(4).to_string(index=False))
 
 
 if __name__ == "__main__":

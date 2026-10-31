@@ -23,7 +23,7 @@ kbank_advanc_forecast/
 │   └── feature_dictionary.csv   feature ทุกตัว + เวลาที่พร้อมใช้ + รอบที่ใช้ได้
 │
 ├── data/                     📦  ข้อมูล (ไม่แก้ไฟล์ดิบ)
-│   ├── raw/                     <source>/<SYMBOL>_<interval>.csv — yfinance/ (backtest 60m ~2 ปี), settrade/, _synthetic/
+│   ├── raw/                     <source>/<SYMBOL>_<interval>.csv — yfinance/ (backtest 60m ~3 ปี ตั้งแต่ 24/10/2023), settrade/, _synthetic/
 │   ├── external/                ตลาดต่างประเทศ ค่าเงิน พันธบัตร ฟลอว์ ปฏิทิน (มี available_at)
 │   └── processed/               dataset ที่สร้างแล้ว (สร้างใหม่ได้เสมอ)
 │
@@ -89,7 +89,7 @@ python scripts/00_make_synthetic_data.py
 python experiments/03_run_experiment.py E0 E1 --raw-dir data/raw/_synthetic
 python -m pytest -q
 
-# 2) ข้อมูลจริง — backtest ใช้ yfinance 60m (~2 ปี); Settrade 1m ย้อนได้แค่ ~4 วันทำการ
+# 2) ข้อมูลจริง — backtest ใช้ yfinance 60m (~3 ปี ตั้งแต่ 24/10/2023, ขาด 2 วัน: 02/01/2024, 02/02/2026); Settrade 1m ย้อนได้แค่ ~4 วันทำการ
 python scripts/00_fetch_yfinance.py                    # → data/raw/yfinance/<SYMBOL>_<interval>.csv
 python scripts/00_fetch_settrade.py --start today      # (ต้องมี .env) → data/raw/settrade/<SYMBOL>_1m.csv
 python scripts/01_check_data.py
