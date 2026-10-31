@@ -129,4 +129,7 @@ def assemble_dataset(rules, raw_dir=None, ext_dir=None, feature_minutes=None, sp
     if drop:
         ds = ds.drop(columns=drop)
 
-    return add_flat_features(add_sigma(ds), used_bars, rules).reset_index(drop=True)
+    ds = add_flat_features(add_sigma(ds), used_bars, rules)
+    # E12 (สูตร CN340): ไฟล์รายวันอยู่ใต้ data/raw จริงเท่านั้น — ข้อมูลจำลอง (raw_dir) ไม่มี fd_
+    from forecast.features.cn340 import add_cn340_features
+    return add_cn340_features(ds, used_bars, rules, None if raw_dir is None else raw_dir / "_none").reset_index(drop=True)

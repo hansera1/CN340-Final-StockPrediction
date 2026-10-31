@@ -40,6 +40,10 @@ def load_or_build_dataset(rules, feature_minutes=None, spectral=False, raw_dir=N
         if "fl_exp_ticks" not in ds:              # cache รุ่นก่อน E9-FLAT
             bars = {s: load_bars(s, rules, raw_dir, interval) for s in rules["symbols"]}
             ds = add_flat_features(ds, bars, rules)
+        if "fh_rsi14" not in ds:                  # cache รุ่นก่อน E12 (ไม่สร้างใหม่ทั้งหมด → แถวและ label เดิมทุกค่า)
+            from forecast.features.cn340 import add_cn340_features
+            bars = {s: load_bars(s, rules, raw_dir, interval) for s in rules["symbols"]}
+            ds = add_cn340_features(ds, bars, rules, None if raw_dir is None else raw_dir / "_none")
         return ds.reset_index(drop=True)
     ds = assemble_dataset(rules, raw_dir=raw_dir, feature_minutes=feature_minutes, spectral=spectral,
                           interval=interval)

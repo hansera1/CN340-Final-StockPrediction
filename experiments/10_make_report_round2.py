@@ -1,7 +1,7 @@
 """รายงานรอบที่ 2 (HTML → PDF) — ตัวเลขทุกตัวอ่านจาก outputs/reports/round2/*.csv และ outputs/experiments/
 
-    python scripts/09_score_round2.py          # คำนวณตัวชี้วัดก่อน
-    python scripts/10_make_report_round2.py [--out outputs/reports/report_round2.pdf]
+    python experiments/09_score_round2.py          # คำนวณตัวชี้วัดก่อน
+    python experiments/10_make_report_round2.py [--out outputs/reports/report_round2.pdf]
 
 ส่วน E10 ที่ยังรันไม่เสร็จจะแสดงเท่าที่มี (รันซ้ำได้เมื่อมีผลเพิ่ม)
 """

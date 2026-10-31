@@ -1,0 +1,6 @@
+﻿group,n,share_shifted,mae_rule_baht,mae_pc_baht,mae_rule_ticks,coverage50,coverage80
+ALL,40,0.0,1.475,1.475,1.475,0.475,0.85
+KBANK/morning,10,0.0,2.1,2.1,2.1,0.5,0.8
+KBANK/afternoon,10,0.0,1.1,1.1,1.1,0.3,0.6
+ADVANC/morning,10,0.0,1.7,1.7,1.7,0.5,1.0
+ADVANC/afternoon,10,0.0,1.0,1.0,1.0,0.6,1.0

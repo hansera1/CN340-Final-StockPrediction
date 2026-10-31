@@ -1,4 +1,4 @@
-"""ให้สคริปต์ใน scripts/ import แพ็กเกจ forecast จาก src/ ได้โดยไม่ต้องติดตั้ง"""
+"""ให้สคริปต์ใน scripts/ และ experiments/ import แพ็กเกจ forecast จาก src/ ได้โดยไม่ต้องติดตั้ง"""
 import sys
 from pathlib import Path
 

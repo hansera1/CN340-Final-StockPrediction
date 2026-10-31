@@ -1,0 +1,13 @@
+﻿session,symbol,period,n,mae_old,mae_new,same_price,end_matches_label
+morning,KBANK,walk-forward (ไม่รวม holdout),597,1.4095477386934674,1.4103852596314908,0.4455611390284757,
+morning,KBANK,ทุกวัน,723,1.3416320885200552,1.3450899031811896,0.4536652835408022,
+morning,ADVANC,walk-forward (ไม่รวม holdout),597,2.637353433835846,2.6331658291457285,0.3685092127303183,
+morning,ADVANC,ทุกวัน,723,2.4156293222683263,2.421853388658368,0.3997233748271093,
+afternoon,KBANK,วันที่มี 1m (yfinance) 19/10–30/10,9,1.1111111111111112,1.6666666666666667,0.3333333333333333,0.8888888888888888
+afternoon,ADVANC,วันที่มี 1m (yfinance) 19/10–30/10,9,1.1111111111111112,1.2222222222222223,0.4444444444444444,0.8888888888888888
+afternoon,KBANK,วันที่มี 1m (settrade) 26/10–29/10,4,0.5,1.0,0.5,1.0
+afternoon,ADVANC,วันที่มี 1m (settrade) 26/10–29/10,4,1.25,1.0,0.75,1.0
+afternoon,KBANK,5m yfinance ไม่รวม holdout 03/08–12/10,50,1.2,1.16,0.6,
+afternoon,KBANK,5m yfinance holdout 14–29/10 14/10–29/10,10,1.1,1.5,0.3,
+afternoon,ADVANC,5m yfinance ไม่รวม holdout 03/08–12/10,50,1.2,1.14,0.64,
+afternoon,ADVANC,5m yfinance holdout 14–29/10 14/10–29/10,10,1.0,1.3,0.5,

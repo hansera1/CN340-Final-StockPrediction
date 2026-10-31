@@ -14,3 +14,5 @@ catboost>=1.2
 torch>=2.0
 torchvision>=0.17
 Pillow>=10
+# A1 wavelet coherence (experiments/13_wavelet_coherence.py): pip install --no-deps pycwt==0.4.0b0
+#   (--no-deps: pycwt กำหนด numpy<2 ซึ่งจะลด numpy ลงและเปิด pickle เดิมไม่ได้ — ใช้กับ numpy 2.x ได้เพราะไม่ได้เรียก rednoise ของ pycwt)

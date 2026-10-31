@@ -1,6 +1,6 @@
 """คิดคะแนน E9-FLAT (docs/NEXT_STEPS.md ข้อ 2) จาก predictions ที่มีอยู่ — ไม่ฝึกใหม่ ไม่แตะ holdout
 
-    python scripts/11_score_flat.py
+    python experiments/11_score_flat.py
     → outputs/reports/round2/flat_*.csv
 
 1. Model A (A-dir: ปลาย = ต้นช่วง, A-price: ปลาย = P(c)) — log loss / Brier เทียบ baseline สัดส่วนวันนิ่งในอดีต

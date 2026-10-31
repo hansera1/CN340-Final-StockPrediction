@@ -44,11 +44,19 @@ kbank_advanc_forecast/
 │   ├── 01_check_data.py            ตรวจคุณภาพ + จำนวนตัวอย่างจริง
 │   ├── 01b_validate_sources.py     yfinance 60m เทียบ Settrade 1m (ราคา label + features วันจริง)
 │   ├── 02_build_dataset.py         สร้าง dataset
-│   ├── 03_run_experiment.py        รัน E0–E6 + bootstrap
-│   ├── 04_lock_model.py            ล็อกวิธี ฝึกโมเดลสุดท้าย
+│   ├── 04_lock_model.py            ล็อกวิธี ฝึกโมเดลที่ล็อกทุกตัวใน rules.yaml → live
 │   ├── 05_predict_live.py          ส่งจริง (เช้า/บ่าย)
 │   ├── 06_score_live.py            ให้คะแนนหลังรู้ผล
 │   └── 07_propose_cutoff.py        เสนอค่า c_เช้า / c_บ่าย จากความหน่วง + เวลารันที่วัดได้
+│
+├── experiments/              🧪  โค้ดการทดลอง (ไม่อยู่ในเส้นทางส่งจริง)
+│   ├── 03_run_experiment.py        รัน E0–E12 + bootstrap (--holdout ใช้ครั้งเดียวหลังล็อก)
+│   ├── 08 / 10 / 16_make_report*   รายงานรอบที่ 1 / 2 / 3 (PDF)
+│   ├── 09_score_round2.py · 11_score_flat.py · 12_score_e12.py · 14_score_holdout.py
+│   ├── 13_wavelet_coherence.py     A1 / A2 ความสัมพันธ์ในย่านความถี่สูง
+│   └── 15_e11_pilot.py             E11 ResNet18 บน scalogram 5m (pilot)
+│
+├── results/                  📑  ผลทุกการทดลอง (lock_decision.md, holdout/, e12/, a1/, a2/, e11/, experiments/*.csv.gz)
 │
 ├── tests/                    ✅  ทดสอบการรั่วของอนาคต · labels · โมเดล
 │
@@ -78,7 +86,7 @@ pip install -r requirements.txt
 
 # 1) ทดสอบ pipeline ด้วยข้อมูลจำลอง
 python scripts/00_make_synthetic_data.py
-python scripts/03_run_experiment.py E0 E1 --raw-dir data/raw/_synthetic
+python experiments/03_run_experiment.py E0 E1 --raw-dir data/raw/_synthetic
 python -m pytest -q
 
 # 2) ข้อมูลจริง — backtest ใช้ yfinance 60m (~2 ปี); Settrade 1m ย้อนได้แค่ ~4 วันทำการ
@@ -87,10 +95,10 @@ python scripts/00_fetch_settrade.py --start today      # (ต้องมี .en
 python scripts/01_check_data.py
 python scripts/01b_validate_sources.py                 # ยืนยันว่า 60m ตรงกับรายนาที
 python scripts/02_build_dataset.py
-python scripts/03_run_experiment.py E0 E1 E2
+python experiments/03_run_experiment.py E0 E1 E2
 
-# 3) ล็อกวิธี (5 พ.ย.) → แก้ live ใน configs/rules.yaml แล้ว
-python scripts/04_lock_model.py
+# 3) ล็อกวิธี (โมเดลที่ล็อกอยู่ใน configs/rules.yaml → live; เหตุผลใน results/lock_decision.md)
+python scripts/04_lock_model.py               # refit ศ. 6 พ.ย. ด้วยคำสั่งเดียวกัน
 
 # 4) วันจริง (9–13 พ.ย.)
 python scripts/05_predict_live.py morning     # ที่ c_เช้า ส่งก่อน 09:30

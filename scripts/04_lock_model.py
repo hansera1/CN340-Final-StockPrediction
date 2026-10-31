@@ -1,9 +1,11 @@
-"""ล็อกวิธี: ฝึกโมเดลที่เลือกบนข้อมูลที่มีทั้งหมดแล้วบันทึกไว้ใช้ส่งจริง (5–6 พ.ย.)
+"""ล็อกวิธี: ฝึกโมเดลที่เลือกบนข้อมูลที่มีทั้งหมดแล้วบันทึกไว้ใช้ส่งจริง
 
-    python scripts/04_lock_model.py [--exp E1 --variant independent] [--raw-dir ...]
+    python scripts/04_lock_model.py                      # ทุกโมเดลใน rules.yaml → live (ทิศทาง, ราคา 2 ตัว, เงา)
+    python scripts/04_lock_model.py --spec E9/lrx        # เฉพาะตัวที่ระบุ
     → outputs/models/<E>/<variant>/<SYMBOL>_<session>.pkl
 
-ค่า default มาจาก rules.yaml → live; หลังล็อกห้ามเปิดค้นพารามิเตอร์ใหม่ระหว่างสัปดาห์จริง
+refit ตามกติกา (ศ. 6 พ.ย.) ใช้คำสั่งเดียวกัน — ค่า hyperparameter / features มาจาก experiments.yaml ไม่เปลี่ยน
+หลังล็อกห้ามเปิดค้นพารามิเตอร์ใหม่ระหว่างสัปดาห์จริง
 """
 import argparse
 from pathlib import Path
@@ -11,32 +13,31 @@ from pathlib import Path
 import _setup  # noqa: F401
 
 from forecast.config import OUTPUT_DIR, load_experiments, load_rules
-from forecast.evaluation.runner import fit_final, load_or_build_dataset, sequences_for, variant_interval
+from forecast.evaluation.runner import fit_final, load_or_build_dataset, variant_interval
+
+LIVE_KEYS = ["direction", "price_eq", "price_up", "shadow"]
 
 
 def main():
     rules = load_rules()
     ap = argparse.ArgumentParser()
-    ap.add_argument("--exp", default=rules["live"]["experiment"])
-    ap.add_argument("--variant", default=rules["live"]["variant"])
+    ap.add_argument("--spec", nargs="+", help="เช่น E9/lrx (default = ทุกตัวใน live)")
     ap.add_argument("--raw-dir", type=Path)
     args = ap.parse_args()
+    specs = args.spec or list(dict.fromkeys(rules["live"][k] for k in LIVE_KEYS))
 
-    exp = load_experiments()[args.exp]
-    if exp.get("pilot"):
-        raise SystemExit(f"{args.exp} เป็น pilot (ข้อมูลน้อย) — ไม่ควรล็อกเป็นโมเดลส่งจริง")
-    v = next(v for v in exp["variants"] if v["name"] == args.variant)
-    interval = variant_interval(rules, exp, v)
-    if interval != rules["data"]["interval"]:
-        raise SystemExit(f"variant นี้ใช้ {interval} แต่วันจริงสร้าง features จาก {rules['data']['interval']}")
-    ds = load_or_build_dataset(rules, v.get("feature_minutes"), v.get("spectral", False),
-                               args.raw_dir, rebuild=True, interval=interval)
-    seqs = sequences_for(ds, rules, args.raw_dir, interval) if v["model"] == "cnn1d" else None
-    paths = fit_final(ds, v, rules, args.exp, OUTPUT_DIR / "models" / args.exp / args.variant, seqs)
-    for p in paths:
-        print("บันทึก", p)
-    if (args.exp, args.variant) != (rules["live"]["experiment"], rules["live"]["variant"]):
-        print("\nอย่าลืมแก้ live.experiment / live.variant ใน configs/rules.yaml ให้ตรงกับโมเดลนี้")
+    ds = load_or_build_dataset(rules, raw_dir=args.raw_dir, rebuild=True)
+    print(f"ข้อมูลฝึก: {ds['date'].min().date()} – {ds.loc[ds['up'].notna(), 'date'].max().date()} ({len(ds)} แถว)")
+    for spec in specs:
+        code, name = spec.split("/")
+        exp = load_experiments()[code]
+        if exp.get("pilot"):
+            raise SystemExit(f"{code} เป็น pilot (ข้อมูลน้อย) — ไม่ควรล็อกเป็นโมเดลส่งจริง")
+        v = next(v for v in exp["variants"] if v["name"] == name)
+        if variant_interval(rules, exp, v) != rules["data"]["interval"]:
+            raise SystemExit(f"{spec} ไม่ได้ใช้ {rules['data']['interval']} ซึ่งเป็นแท่งที่วันจริงใช้สร้าง features")
+        for p in fit_final(ds, v, rules, code, OUTPUT_DIR / "models" / code / name):
+            print("บันทึก", p)
 
 
 if __name__ == "__main__":

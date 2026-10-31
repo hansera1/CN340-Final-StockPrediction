@@ -1,0 +1,4 @@
+﻿model,share_converged
+f0_mlp,1.0
+fd_mlp,1.0
+fdh_mlp,1.0

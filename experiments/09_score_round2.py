@@ -1,6 +1,6 @@
 """ตัวชี้วัดรอบที่ 2 จาก predictions ที่มีอยู่ (ไม่ฝึกใหม่) — NEXT_STEPS ข้อ 1, 2 (ราคา) และตาราง E10
 
-    python scripts/09_score_round2.py
+    python experiments/09_score_round2.py
     → outputs/reports/round2/*.csv
 
 ตัวชี้วัดหลัก: ความแม่นทิศทางแบบไม่นับ flat / flat = ผิด, log loss ขึ้น vs ลง (เฉพาะวันไม่ flat)

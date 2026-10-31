@@ -44,7 +44,7 @@ def live_bars(symbol, rules, date, as_of, raw_dir=None, source_dirs=None):
         return hist.reset_index(drop=True), meta
 
     today, src, lag, skipped = today_bars_1m(symbol, rules, date, as_of, source_dirs)
-    meta.update(source=src, lag_sec=lag, skipped=skipped)
+    meta.update(source=src, lag_sec=lag, skipped=skipped, today_1m=today)   # today_1m → P(c) รอบบ่าย
     if today is None:
         return hist.reset_index(drop=True), meta
     agg = aggregate_bars(today, interval_minutes(rules["data"]["interval"]), rules)

@@ -1,6 +1,6 @@
 """รายงานผลการรัน (HTML → PDF ด้วย Edge/Chrome headless) — ตัวเลขทุกตัวอ่านจากไฟล์ผลจริง
 
-    python scripts/08_make_report.py [--title "รอบที่ 1"] [--out outputs/reports/report_run1.pdf]
+    python experiments/08_make_report.py [--title "รอบที่ 1"] [--out outputs/reports/report_run1.pdf]
 
 ต้องรัน 01b_validate_sources.py และ 03_run_experiment.py (E0–E7s1) ก่อน
 """

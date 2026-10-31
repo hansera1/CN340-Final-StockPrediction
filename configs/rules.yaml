@@ -59,9 +59,11 @@ evaluation:
   block_days: 1            # ขนาดบล็อกวันของ block bootstrap
 
 live:
-  experiment: E1           # โมเดลที่ล็อกแล้วใช้ส่งจริง (แก้หลัง 5 พ.ย.)
-  variant: independent
-  fallback_target: updown  # baseline สำรอง: P(ขึ้น) = สัดส่วนขึ้นในวันไม่ flat (รอบที่ 2) | up = สัดส่วนขึ้นของทุกวัน
+  # โมเดลที่ล็อก (NEXT_STEPS รอบที่ 3 ข้อ 3 → results/lock_decision.md) — bundle ที่ outputs/models/<E>/<variant>/
+  direction: E12/fd_lr       # ทิศทาง: E12 F0 + F-daily, LR (แทน E9-LRx ตามเกณฑ์ข้อ 3) · ทางสุดท้าย = E0-ud จากประวัติ
+  price_eq: E9FLAT/aprice_lr # P(ราคาปลาย = P(c))
+  price_up: E9FLAT/pprice_lr # P(ราคาปลาย > P(c) | ไม่เท่า) → กฎค่ามัธยฐาน
+  shadow: E9/baseline_ud     # รันเงา E0-ud + ช่วงราคา quantile ของ z
   max_price_age_min: 30    # สำหรับรอบบ่าย: ราคา P(c) ต้องไม่เก่ากว่านี้
   # แท่ง 1m ของ "วันนี้" ในวันจริง: ลองตามลำดับ แล้วรวมเป็น data.interval ด้วย aggregate_bars (แบบ yfinance)
   # Settrade ยังไม่มีสิทธิ์ market data → yfinance 1m เป็นสำรอง

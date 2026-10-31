@@ -1,6 +1,6 @@
 """รันการทดลองตาม configs/experiments.yaml ด้วย walk-forward แล้วเทียบกับ variant แรกด้วย block bootstrap
 
-    python scripts/03_run_experiment.py E1 [E2 ...] [--raw-dir ...] [--holdout]
+    python experiments/03_run_experiment.py E1 [E2 ...] [--raw-dir ...] [--holdout]
     → outputs/experiments/<E>/summary.csv, bootstrap.csv, <variant>_predictions.csv
 
 --holdout ใช้หลังล็อกวิธี (5 พ.ย.) เท่านั้น: ประเมินช่วงท้ายที่กันไว้ครั้งเดียว

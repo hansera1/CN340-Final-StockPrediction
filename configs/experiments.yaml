@@ -171,7 +171,7 @@ EZOO:
 
 # ---------------------------------------------------------------- E9-FLAT (docs/NEXT_STEPS.md ข้อ 2)
 # Model A ทายโอกาสนิ่ง: รวมสองหุ้น + สองรอบในโมเดลเดียว (group_by: [] → ตัวแปรบอกหุ้น f_sym_* และบอกรอบ f_sess_*)
-# p_up ในไฟล์ผล = P(label = 1) ของเป้าหมายนั้น (เช่น P(นิ่ง)) — คิดคะแนนด้วย scripts/11_score_flat.py
+# p_up ในไฟล์ผล = P(label = 1) ของเป้าหมายนั้น (เช่น P(นิ่ง)) — คิดคะแนนด้วย experiments/11_score_flat.py
 # baseline = สัดส่วนวันนิ่งในอดีตของ (หุ้น, รอบ) เดียวกัน; วันทดสอบตัดให้ตรงกับ E9 ตอนคิดคะแนน
 flat_dir_features: &flat_dir_features [fl_exp_ticks, fl_prev_range_ticks, fl_flat20_dir, fl_rv_intra,
                                        fl_dow_0, fl_dow_1, fl_dow_2, fl_dow_3, fl_dow_4]
@@ -191,3 +191,60 @@ E9FLAT:
     - {name: aprice_gbm, model: e9_gbm, group_by: [], features: *flat_price_features, params: {target: flat_price}}
     # p_price: ราคาปลาย > P(c) บนรอบที่ราคาปลาย ≠ P(c) — สเปก E9-LR (pooled หุ้น, แยกรอบ, features E9)
     - {name: pprice_lr, model: e9_lr, group_by: [session], features: *e9_features, params: {target: price_updown}}
+
+# ---------------- รอบที่ 3 ----------------
+# E12: สูตร feature / โมเดลจากงานรายวันเดิม (CN340) — features/cn340.py, models/e12.py
+#   F-daily (fd_) = technical รายวัน ณ ราคาปิดวันก่อน + วันในสัปดาห์ของวันที่ทาย (fl_dow_)
+#   F-60m  (fh_) = technical บนแท่ง 60m ต่อเนื่องถึงแท่งล่าสุดที่จบก่อนจุดตัด (รอบบ่ายเท่านั้น)
+f_daily: &f_daily [fd_ret_1, fd_ret_2, fd_ret_3, fd_ret_5, fd_ret_10, fd_hl_range, fd_oc_change, fd_close_pos,
+                   fd_c_sma5, fd_c_sma20, fd_c_ema5, fd_c_ema20, fd_sma5_sma20, fd_rsi14, fd_macd, fd_macd_signal,
+                   fd_macd_hist, fd_bb_pos, fd_bb_width, fd_atr14, fd_up_streak, fd_c_max20, fd_c_min20, fd_vol_ratio,
+                   fl_dow_0, fl_dow_1, fl_dow_2, fl_dow_3, fl_dow_4]
+e12_f0: &e12_f0
+  morning: [f_ret_1d, f_ret_5d, f_r_same_mean5, f_r_same_mean20, f_r_prev_afternoon, f_rv_5d]
+  afternoon: [f_ret_1d, f_ret_5d, f_r_same_mean5, f_r_same_mean20, f_r_prev_afternoon, f_rv_5d,
+              f_r_open_to_cut, f_gap_open, f_rv_intra]
+e12_fd: &e12_fd
+  morning: [f_ret_1d, f_ret_5d, f_r_same_mean5, f_r_same_mean20, f_r_prev_afternoon, f_rv_5d,
+            fd_ret_1, fd_ret_2, fd_ret_3, fd_ret_5, fd_ret_10, fd_hl_range, fd_oc_change, fd_close_pos,
+            fd_c_sma5, fd_c_sma20, fd_c_ema5, fd_c_ema20, fd_sma5_sma20, fd_rsi14, fd_macd, fd_macd_signal,
+            fd_macd_hist, fd_bb_pos, fd_bb_width, fd_atr14, fd_up_streak, fd_c_max20, fd_c_min20, fd_vol_ratio,
+            fl_dow_0, fl_dow_1, fl_dow_2, fl_dow_3, fl_dow_4]
+  afternoon: [f_ret_1d, f_ret_5d, f_r_same_mean5, f_r_same_mean20, f_r_prev_afternoon, f_rv_5d,
+              f_r_open_to_cut, f_gap_open, f_rv_intra,
+              fd_ret_1, fd_ret_2, fd_ret_3, fd_ret_5, fd_ret_10, fd_hl_range, fd_oc_change, fd_close_pos,
+              fd_c_sma5, fd_c_sma20, fd_c_ema5, fd_c_ema20, fd_sma5_sma20, fd_rsi14, fd_macd, fd_macd_signal,
+              fd_macd_hist, fd_bb_pos, fd_bb_width, fd_atr14, fd_up_streak, fd_c_max20, fd_c_min20, fd_vol_ratio,
+              fl_dow_0, fl_dow_1, fl_dow_2, fl_dow_3, fl_dow_4]
+e12_fdh: &e12_fdh
+  morning: [f_ret_1d, f_ret_5d, f_r_same_mean5, f_r_same_mean20, f_r_prev_afternoon, f_rv_5d,
+            fd_ret_1, fd_ret_2, fd_ret_3, fd_ret_5, fd_ret_10, fd_hl_range, fd_oc_change, fd_close_pos,
+            fd_c_sma5, fd_c_sma20, fd_c_ema5, fd_c_ema20, fd_sma5_sma20, fd_rsi14, fd_macd, fd_macd_signal,
+            fd_macd_hist, fd_bb_pos, fd_bb_width, fd_atr14, fd_up_streak, fd_c_max20, fd_c_min20, fd_vol_ratio,
+            fl_dow_0, fl_dow_1, fl_dow_2, fl_dow_3, fl_dow_4]
+  afternoon: [f_ret_1d, f_ret_5d, f_r_same_mean5, f_r_same_mean20, f_r_prev_afternoon, f_rv_5d,
+              f_r_open_to_cut, f_gap_open, f_rv_intra,
+              fd_ret_1, fd_ret_2, fd_ret_3, fd_ret_5, fd_ret_10, fd_hl_range, fd_oc_change, fd_close_pos,
+              fd_c_sma5, fd_c_sma20, fd_c_ema5, fd_c_ema20, fd_sma5_sma20, fd_rsi14, fd_macd, fd_macd_signal,
+              fd_macd_hist, fd_bb_pos, fd_bb_width, fd_atr14, fd_up_streak, fd_c_max20, fd_c_min20, fd_vol_ratio,
+              fl_dow_0, fl_dow_1, fl_dow_2, fl_dow_3, fl_dow_4,
+              fh_rsi14, fh_macd_hist, fh_bb_pos, fh_c_sma20, fh_atr14]
+
+E12:
+  question: สูตร feature และโมเดลจากงานรายวันเดิม (CN340) มีสัญญาณนอกตัวอย่างบนเป้าหมายขึ้น vs ลงหรือไม่
+  legacy: CN340 (งานรายวันเดิม)
+  # pooled สองหุ้น + ตัวแปรบอกหุ้น แยกเช้า/บ่าย, ค่าตายตัวไม่จูน, walk-forward / วันทดสอบเดียวกับ E9, ไม่แตะ holdout
+  variants:
+    - {name: baseline_ud, model: baseline, params: {target: updown}}
+    - {name: f0_lr, model: e12_lr, group_by: [session], features: *e12_f0}
+    - {name: f0_rf, model: e12, group_by: [session], features: *e12_f0, params: {kind: rf}}
+    - {name: f0_xgb, model: e12, group_by: [session], features: *e12_f0, params: {kind: xgb}}
+    - {name: f0_mlp, model: e12, group_by: [session], features: *e12_f0, params: {kind: mlp}}
+    - {name: fd_lr, model: e12_lr, group_by: [session], features: *e12_fd}
+    - {name: fd_rf, model: e12, group_by: [session], features: *e12_fd, params: {kind: rf}}
+    - {name: fd_xgb, model: e12, group_by: [session], features: *e12_fd, params: {kind: xgb}}
+    - {name: fd_mlp, model: e12, group_by: [session], features: *e12_fd, params: {kind: mlp}}
+    - {name: fdh_lr, model: e12_lr, group_by: [session], features: *e12_fdh}
+    - {name: fdh_rf, model: e12, group_by: [session], features: *e12_fdh, params: {kind: rf}}
+    - {name: fdh_xgb, model: e12, group_by: [session], features: *e12_fdh, params: {kind: xgb}}
+    - {name: fdh_mlp, model: e12, group_by: [session], features: *e12_fdh, params: {kind: mlp}}

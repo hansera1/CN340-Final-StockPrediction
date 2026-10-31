@@ -25,6 +25,28 @@ class PredictionLog:
     fallback_reason: str | None = None
     data_source: str | None = None       # แหล่งแท่ง 1m วันนี้ (settrade / yfinance / history-only)
     data_lag_sec: float | None = None    # จุดตัด − เวลาจบของแท่ง 1m ล่าสุดที่ใช้
+    data_age_min: float | None = None    # จุดตัด − เวลาจบของแท่งล่าสุดที่ใช้ทำ features (อายุข้อมูล)
+    reference_source: str | None = None  # ที่มาของ P(c): Settrade 1d close (เช้า) / แท่ง 1m (บ่าย) / ทางสำรอง
+    p_eq: float | None = None            # P(ราคาปลาย = P(c)) จาก A-price LR
+    p_price: float | None = None         # P(ราคาปลาย > P(c) | ไม่เท่า)
+    p_higher: float | None = None        # (1 − p_eq) × p_price
+    p_lower: float | None = None
+
+
+@dataclass
+class ShadowLog:
+    """รันเงา (E0-ud + ราคาล่าสุด ณ จุดตัด) — ใช้เทียบในรายงานเท่านั้น ห้ามส่ง ห้ามใช้เปลี่ยนโมเดล"""
+    symbol: str
+    session: str
+    date: str
+    data_cutoff: str
+    generated_at: str
+    model: str
+    p_up: float
+    direction: str
+    reference_price: float
+    point_price: float
+    price_quantiles: dict = field(default_factory=dict)
 
 
 def append_log(path, record):

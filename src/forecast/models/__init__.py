@@ -20,6 +20,9 @@ def get_model(name, quantiles, **kwargs):
     if name in ("e9_lr", "e9_gbm", "e9_zoo"):   # E9: ขึ้น vs ลง + ช่วงราคา conformal
         from forecast.models.e9 import E9GBM, E9LR, E9Zoo
         return {"e9_lr": E9LR, "e9_gbm": E9GBM, "e9_zoo": E9Zoo}[name](quantiles, **kwargs)
+    if name in ("e12", "e12_lr"):   # E12: สูตร feature / โมเดลจากงานรายวันเดิม (CN340)
+        from forecast.models.e12 import E12Fixed, E12LR
+        return (E12LR if name == "e12_lr" else E12Fixed)(quantiles, **kwargs)
     if name == "finetune":   # E10: CNN pretrained แบบ fine-tune
         from forecast.models.finetune import FineTuneModel
         return FineTuneModel(quantiles, **kwargs)
