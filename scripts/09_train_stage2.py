@@ -1,6 +1,6 @@
 """E13: ฝึกชั้น 2 ตอนเย็นสำหรับรอบบ่ายของวันทำการถัดไป (results/e13_preregistration.md)
 
-    python scripts/08_train_stage2.py [--date 2026-11-02]    # default = วันทำการถัดไป (รันใน 00_collect_daily.py ให้เอง)
+    python scripts/09_train_stage2.py [--date 2026-11-02]    # default = วันทำการถัดไป (รันใน 00_collect_daily.py ให้เอง)
 → outputs/models/stage2/<วันที่>.json (β, mean, sd, จำนวนวัน/แถวฝึก หรือเหตุผลที่ใช้ p₁)
 """
 import argparse

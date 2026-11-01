@@ -1,0 +1,86 @@
+{
+ "checked_at": "2026-11-01T18:19:02",
+ "machine": {
+  "script": "08_check_ready",
+  "started_at": "2026-11-01T18:18:42+07:00",
+  "utc_offset": "+07:00",
+  "tz_note": null,
+  "host": "PunnawichGJ",
+  "network": "Wi-Fi",
+  "commit": "12f5124-dirty",
+  "python": "3.12.9",
+  "clock_skew_sec": 0.5,
+  "clock_ref": "https://www.settrade.com",
+  "clock_warning": false
+ },
+ "morning_target": "2026-11-02",
+ "afternoon_target": "2026-11-02",
+ "ready": true,
+ "checks": [
+  {
+   "check": "เขตเวลา",
+   "status": "PASS",
+   "detail": "Asia/Bangkok (UTC+07:00)"
+  },
+  {
+   "check": "นาฬิกา",
+   "status": "PASS",
+   "detail": "ต่างจาก https://www.settrade.com +1 วินาที"
+  },
+  {
+   "check": ".env Settrade",
+   "status": "PASS",
+   "detail": "ครบ 4 ค่า"
+  },
+  {
+   "check": ".env แจ้งเตือน",
+   "status": "WARN",
+   "detail": "ยังไม่ตั้งช่องทาง (เก็บลง outbox อย่างเดียว)"
+  },
+  {
+   "check": "โมเดล direction (E12/fd_lr)",
+   "status": "PASS",
+   "detail": "4 ไฟล์ trained_until 2026-10-29"
+  },
+  {
+   "check": "โมเดล price_eq (E9FLAT/aprice_lr)",
+   "status": "PASS",
+   "detail": "4 ไฟล์ trained_until 2026-10-30"
+  },
+  {
+   "check": "โมเดล price_up (E9FLAT/pprice_lr)",
+   "status": "PASS",
+   "detail": "4 ไฟล์ trained_until 2026-10-30"
+  },
+  {
+   "check": "โมเดล shadow (E9/baseline_ud)",
+   "status": "PASS",
+   "detail": "4 ไฟล์ trained_until 2026-10-30"
+  },
+  {
+   "check": "โมเดล flat_dir (E9FLAT/adir_lr)",
+   "status": "PASS",
+   "detail": "4 ไฟล์ trained_until 2026-10-30"
+  },
+  {
+   "check": "ข้อมูลถึงวันทำการก่อน (30/10)",
+   "status": "PASS",
+   "detail": "settrade 1d + yfinance 60m ครบ"
+  },
+  {
+   "check": "ร่างรอบเช้า 02/11",
+   "status": "PASS",
+   "detail": "E12-fd_lr-202611010023"
+  },
+  {
+   "check": "β ชั้น 2 รอบบ่าย 02/11",
+   "status": "PASS",
+   "detail": "พร้อม"
+  },
+  {
+   "check": "Settrade API",
+   "status": "PASS",
+   "detail": "KBANK 1d ล่าสุด 30/10/2026"
+  }
+ ]
+}

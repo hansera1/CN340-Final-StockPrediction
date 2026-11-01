@@ -7,7 +7,8 @@
 
 | เวลา | คำสั่ง | ตรวจ |
 |---|---|---|
-| เย็นวันก่อน หลัง 17:00 | `python scripts/00_collect_daily.py` | จบด้วย "สำเร็จทั้งหมด" |
+| เย็นวันก่อน 17:30 (อัตโนมัติ) | `00_collect_daily.py` (Task Scheduler) → ร่างรอบเช้า + β ชั้น 2 + `evening_status_<วันที่>.json` | ข้อความแจ้งเตือน 🌙 "สำเร็จ" |
+| เย็นวันก่อน / เช้าก่อนจุดตัด | `python scripts/08_check_ready.py` (ทั้งเครื่องหลักและสำรอง) | ไม่มี FAIL |
 | จุดตัดเช้า (ดู `sessions.morning.cutoff`) | `python scripts/05_predict_live.py morning` | checklist ด้านล่าง |
 | จุดตัดบ่าย (ดู `sessions.afternoon.cutoff`) | `python scripts/05_predict_live.py afternoon` | checklist ด้านล่าง |
 | หลังส่ง | จดเวลาส่งจริงลง `outputs/logs/submit_times.csv` | |

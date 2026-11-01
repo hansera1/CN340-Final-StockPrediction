@@ -211,7 +211,7 @@ ATC ≠ ราคา 16:29 ใน 739 จาก 1,252 บ่าย (59%) · ว�
 ## E — E13 (การทดลอง, ค่าเริ่มต้น = รันเงา)
 
 - ลงทะเบียนเกณฑ์ commit `46dc826` ก่อนเขียนโค้ด backtest (`results/e13_preregistration.md`)
-- โค้ด: `features/fine.py`, `models/stage2.py`, `live/stage2_live.py`, `experiments/21_e13_stage2.py`, `scripts/08_train_stage2.py`, `tests/test_e13.py` (E-5 ผ่าน 8/8)
+- โค้ด: `features/fine.py`, `models/stage2.py`, `live/stage2_live.py`, `experiments/21_e13_stage2.py`, `scripts/09_train_stage2.py`, `tests/test_e13.py` (E-5 ผ่าน 8/8)
 - วันจริง: `live.stage2: {enabled: true, mode: shadow}` · β ฝึกตอนเย็น → `outputs/models/stage2/<วันที่>.json` · log: p_stage1, p_final, stage2_betas, stage2_reason
 - E-2 ดูล่วงหน้าที่จุดตัดชั่วคราว 12:15 (26–30 ต.ค.): OHLC ตรง 300/300 แท่ง (ต่าง 0 ช่อง), เครื่องหมาย f5 ตรงทุกวัน — **รันซ้ำด้วยจุดตัดจริงก่อนตัดสิน**
 - backtest E-3: **ยังไม่รัน** (สคริปต์ไม่ยอมรันจนกว่าจะมี `results/latency_2026-11-02.md` และรันได้ครั้งเดียว)
@@ -226,3 +226,16 @@ ATC ≠ ราคา 16:29 ใน 739 จาก 1,252 บ่าย (59%) · ว�
 | (ง) ทศนิยม | `live.price_decimal.enabled` | ปิด |
 | (จ) สอดคล้องทิศทาง | `live.price_consistency.enabled` | ปิด |
 | (ฉ) E13 ส่งจริง | `live.stage2.mode` | shadow |
+
+## งาน 9 — ระบบรันจริงและเครื่องสำรอง (1 พ.ย.)
+
+- ทุกสคริปต์ใน `scripts/` (ผ่าน `_setup.py` → `forecast/runtime.py`): พิมพ์/บันทึกเวลา + เขตเวลา, commit, ชื่อเครื่อง, เครือข่าย → `outputs/logs/run_start.jsonl`
+  · เขตเวลาไม่ใช่ UTC+7 → หยุด (Windows ตั้ง TZ ในโปรแกรมไม่ได้) · นาฬิกาเทียบ Date header ของ settrade.com ต่าง > 60 วินาที → เตือน
+- `00_collect_daily.py` → `evening_status_<วันทำการถัดไป>.json` · `05 morning` ตรวจก่อน ไม่สำเร็จ → รันงานเย็นซ้ำ (`--force --target-date`)
+- แจ้งเตือน (`live/notify.py`, ช่องทางใน .env: Discord / Slack / Telegram) เมื่อได้ไฟล์ส่ง, fallback, รันล้ม, เส้นตาย − 10 นาทียังไม่มีไฟล์ (`10_watchdog.py`)
+  · ทุกข้อความเก็บใน `notify_outbox.jsonl` · ส่งล้มไม่ raise ไม่บันทึก URL/token
+- `08_check_ready.py` (เครื่องหลัก 1 พ.ย. 17:47: 1 FAIL = ยังไม่มีร่างรอบเช้า 2 พ.ย. → รันงานเย็นแล้ว · WARN = ยังไม่ตั้งช่องทางแจ้งเตือน)
+- Task Scheduler (`setup_tasks.ps1`, จันทร์–ศุกร์, ข้ามวันหยุดในสคริปต์): งานเย็น 17:30 (wake + run if missed), watchdog 09:20 / 12:20 (wake)
+  · ทำนายตามจุดตัด (`-WithPredict`) ตั้งหลังได้จุดตัดจริง · ไม่ deploy บนเซิร์ฟเวอร์ — ใช้โน้ตบุ๊ก + เครื่องสำรอง
+- `08_train_stage2.py` เปลี่ยนชื่อเป็น `09_train_stage2.py` (ให้เลข 08 เป็น check_ready ตามแผน) · เครื่องสำรอง: `11_backup_bundle.py` (zip ไม่มี .env) + `--restore`
+- test `tests/test_ops.py` 14 ตัวผ่าน (เขตเวลา, นาฬิกา, log ตอนเริ่ม, สถานะงานเย็น + รันซ้ำ, แจ้งเตือนล้ม/ซ่อนความลับ, check_ready)

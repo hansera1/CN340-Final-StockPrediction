@@ -23,8 +23,13 @@
   รันตอนเช้าล้ม → ใช้ร่างเป็นไฟล์ส่ง พร้อม fallback_reason
 → outputs/logs/predictions.jsonl            (log ก่อนรู้ผล ห้ามแก้)
 → outputs/logs/shadow_log.jsonl             (รันเงา E0-ud + ราคาล่าสุด — ห้ามส่ง ใช้เทียบในรายงานเท่านั้น)
+
+งาน 9: วันหยุด (calendar.csv) → ไม่รัน · รอบเช้าตรวจ evening_status ก่อน (ไม่มี/ไม่สำเร็จ → รันงานเย็นซ้ำทันที)
+· แจ้งเตือนกลุ่มเมื่อได้ไฟล์ส่ง / ใช้ fallback / รันล้ม (live/notify.py — การแจ้งเตือนล้มไม่กระทบไฟล์ส่ง)
 """
 import argparse
+import subprocess
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -34,8 +39,11 @@ import pandas as pd
 
 from forecast.config import INTERVAL_MIN, OUTPUT_DIR, RAW_DIR, ROOT, load_rules, raw_source_dir, session_times
 from forecast.data.io import drop_unfinished, merge_into_raw, raw_path
-from forecast.live.daily_check import build_fallback_root, missing_daily, next_trading_day, prev_trading_day
+from forecast.live.daily_check import (build_fallback_root, is_trading_day, missing_daily, next_trading_day,
+                                       prev_trading_day)
+from forecast.live.evening import needs_rerun
 from forecast.live.log_schema import PredictionLog, append_log, read_logs
+from forecast.live.notify import notify
 from forecast.live.predict import predict_session
 
 SESSION_TH = {"morning": "เช้า", "afternoon": "บ่าย"}
@@ -212,6 +220,17 @@ def from_draft(date, err):
     return out
 
 
+def ensure_evening(date):
+    """งาน 9 ข้อ 3: รอบเช้าจริง — งานเย็นของวันนี้ต้องสำเร็จ ไม่งั้นรันซ้ำทันที (เก็บข้อมูล + ร่าง + ชั้น 2)"""
+    rerun, why = needs_rerun(date)
+    if not rerun:
+        print(f"งานเย็นสำหรับ {date:%d/%m} สำเร็จ (ร่างรอบเช้า + β ชั้น 2 พร้อม)")
+        return
+    warn([f"{why} → รันงานเย็นซ้ำก่อนทำนาย"])
+    subprocess.run([sys.executable, str(Path(__file__).with_name("00_collect_daily.py")), "--force",
+                    "--target-date", f"{date:%Y-%m-%d}"])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("session", choices=["morning", "afternoon"])
@@ -223,8 +242,14 @@ def main():
     args = ap.parse_args()
     rules = load_rules()
     t0 = time.perf_counter()
+    real = not (args.draft or args.now or args.data_root)     # รอบส่งจริง (ไม่ใช่ร่าง / ซ้อมย้อนหลัง)
     if not args.draft:
         args.date = args.date or datetime.now().strftime("%Y-%m-%d")
+    if real and not is_trading_day(args.date):
+        print(f"{args.date} ไม่ใช่วันทำการ (calendar.csv) — ไม่รัน")
+        return
+    if real and args.session == "morning":
+        ensure_evening(pd.Timestamp(args.date))
     if args.draft:
         if args.session != "morning":
             raise SystemExit("--draft ใช้กับรอบเช้าเท่านั้น")
@@ -293,8 +318,9 @@ def main():
     print(f"\n→ {out}")
     run_sec = time.perf_counter() - t0
     log = OUTPUT_DIR / "logs" / "run_time.csv"
-    pd.DataFrame([{"session": args.session, "date": args.date, "started": datetime.now(), "run_sec": run_sec,
-                   "fetched": not args.no_fetch}]).to_csv(log, mode="a", header=not log.exists(), index=False)
+    row = pd.DataFrame([{"session": args.session, "date": args.date, "started": datetime.now(), "run_sec": run_sec,
+                         "fetched": not args.no_fetch, "host": _setup.RUN["host"], "network": _setup.RUN["network"]}])
+    (pd.concat([pd.read_csv(log), row]) if log.exists() else row).to_csv(log, index=False)
     print(f"ใช้เวลา {run_sec:.1f} วินาที (ดึงข้อมูล + ทำนาย) → {log}")
     deadline = session_times(rules, args.session, date)["deadline"]
     done = (pd.Timestamp(args.now).tz_localize(rules["timezone"]) + pd.Timedelta(seconds=run_sec) if args.now
@@ -304,11 +330,24 @@ def main():
         return
     print(f"ได้ไฟล์ส่ง {done:%H:%M:%S} — ก่อนเส้นตาย {deadline:%H:%M} อยู่ {(deadline - done).total_seconds() / 60:.1f} นาที"
           + (" (เวลาจำลอง + เวลารันจริง)" if args.now else ""))
-    if detail["fallback"].astype(bool).any():
-        warn(["มีรายการที่ใช้ทางสำรอง — ตรวจทุกบรรทัดในคอลัมน์ fallback ก่อนส่ง"] +
-             [f"{x['หุ้น']}: {x['fallback']}" for _, x in detail.iterrows() if x["fallback"]])
+    fb = [f"{x['หุ้น']}: {x['fallback']}" for _, x in detail.iterrows() if x["fallback"]]
+    if fb:
+        warn(["มีรายการที่ใช้ทางสำรอง — ตรวจทุกบรรทัดในคอลัมน์ fallback ก่อนส่ง"] + fb)
+    if real:
+        head = f"{args.date} {SESSION_TH[args.session]}: ได้ไฟล์ส่ง {done:%H:%M} (เหลือ {(deadline - done).total_seconds() / 60:.0f} นาที)"
+        notify("ready", head, [f"{r.symbol} {r.direction} P(ขึ้น) {r.p_up:.3f} · ราคา {r.price_quantiles['q50']:g} "
+                               f"[{r.price_quantiles['q25']:g}–{r.price_quantiles['q75']:g}]" for r in records]
+               + [f"ไฟล์ {name} · {_setup.RUN['host']}"])
+        if fb:
+            notify("fallback", f"{args.date} {SESSION_TH[args.session]}: ใช้ทางสำรอง — ตรวจก่อนส่ง", fb)
     print(f"รันเงา {len(shadows)} รายการ → {logdir / 'shadow_log.jsonl'} (ไม่ส่ง)")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BaseException as e:   # รวม SystemExit ที่ไม่ใช่ 0 — แจ้งกลุ่มแล้วจบด้วย error เดิม
+        if not (isinstance(e, SystemExit) and e.code in (0, None)) and "--draft" not in sys.argv and "--now" not in sys.argv:
+            notify("failed", f"05_predict_live {' '.join(sys.argv[1:])}: รันล้ม",
+                   [f"{type(e).__name__}: {str(e)[:300]}", "ดูแผนสำรองใน docs/live_runbook.md"])
+        raise

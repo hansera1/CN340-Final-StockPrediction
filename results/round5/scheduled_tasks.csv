@@ -1,0 +1,4 @@
+﻿"task","time","days","action","wake","run_if_missed","next_run"
+"kbank_advanc_collect_daily","17:30","Mon-Fri","00_collect_daily.py","True","True","2026-11-02 17:30"
+"kbank_advanc_watchdog_afternoon","12:20","Mon-Fri","10_watchdog.py afternoon","True","False","2026-11-02 12:20"
+"kbank_advanc_watchdog_morning","09:20","Mon-Fri","10_watchdog.py morning","True","False","2026-11-02 09:20"

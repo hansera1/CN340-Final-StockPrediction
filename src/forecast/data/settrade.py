@@ -3,7 +3,6 @@
 รหัสเข้าถึงอ่านจาก environment variable หรือไฟล์ .env ที่ root โปรเจกต์ (อยู่ใน .gitignore) เท่านั้น
     SETTRADE_APP_ID, SETTRADE_APP_SECRET, SETTRADE_APP_CODE, SETTRADE_BROKER_ID
 """
-import os
 import sys
 
 import pandas as pd
@@ -16,18 +15,8 @@ PRICE_COLS = ["open", "high", "low", "close", "volume", "value"]
 
 def load_credentials(env_file=ROOT / ".env"):
     """.env มาก่อน (ค่าที่กรอกในโปรเจกต์) แล้วค่อยเติมจาก env var — ไม่พิมพ์ค่าออกมา"""
-    creds = dict.fromkeys(ENV_KEYS)
-    if env_file.exists():
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            k, v = k.strip(), v.strip().strip('"').strip("'")
-            if k in creds and v:
-                creds[k] = v
-    for k in ENV_KEYS:
-        creds[k] = creds[k] or os.environ.get(k)
+    from forecast.runtime import read_env
+    creds = read_env(ENV_KEYS, env_file)
     missing = [k for k, v in creds.items() if not v]
     if missing:
         print(f"ยังไม่ได้ตั้งค่า: {', '.join(missing)} — คัดลอก .env.example เป็น .env แล้วกรอก")

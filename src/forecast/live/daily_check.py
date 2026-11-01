@@ -35,6 +35,12 @@ def prev_trading_day(date, holidays=None):
     return d
 
 
+def is_trading_day(date, holidays=None):
+    holidays = market_holidays() if holidays is None else holidays
+    d = pd.Timestamp(date).tz_localize(None).normalize() if pd.Timestamp(date).tzinfo else pd.Timestamp(date).normalize()
+    return d.dayofweek < 5 and d not in holidays
+
+
 def next_trading_day(date, holidays=None):
     holidays = market_holidays() if holidays is None else holidays
     d = pd.Timestamp(date).tz_localize(None).normalize() + pd.Timedelta(days=1)

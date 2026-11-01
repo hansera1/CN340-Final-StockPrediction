@@ -1,0 +1,21 @@
+{
+ "target_date": "2026-11-02",
+ "written_at": "2026-11-01T17:50:25",
+ "sources": {
+  "settrade 1m": true,
+  "settrade 30m": true,
+  "settrade 1d": true,
+  "yfinance": true
+ },
+ "draft": {
+  "ok": true,
+  "model_version": "E12-fd_lr-202611010023"
+ },
+ "stage2": {
+  "ok": true,
+  "reason": null
+ },
+ "run_by": "PunnawichGJ",
+ "commit": "12f5124-dirty",
+ "ok": true
+}

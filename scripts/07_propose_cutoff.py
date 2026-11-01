@@ -28,6 +28,10 @@ def main():
         raise SystemExit("ยังไม่มี latency.csv — รัน 00_fetch_yfinance.py / 00_fetch_settrade.py --latency 30 ช่วงตลาดเปิด")
     lat = pd.read_csv(lat_path, parse_dates=["bar_end", "first_seen"])
     lat["part"] = lat["bar_end"].dt.hour.map(lambda h: "morning" if h < 13 else "afternoon")
+    for name, d in [("latency.csv", lat)] + ([("run_time.csv", pd.read_csv(run_path))] if run_path.exists() else []):
+        if "host" in d:
+            print(f"{name}: วัดบนเครื่อง " + ", ".join(f"{h} ({n})" for h, n in
+                                                      d[["host", "network"]].dropna().drop_duplicates().itertuples(index=False)))
     print("ความหน่วงต่อแหล่ง / ภาค:")
     worst = 0.0
     for (src, part), g in lat.groupby(["source", "part"]):
