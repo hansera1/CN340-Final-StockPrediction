@@ -239,3 +239,12 @@ ATC ≠ ราคา 16:29 ใน 739 จาก 1,252 บ่าย (59%) · ว�
   · ทำนายตามจุดตัด (`-WithPredict`) ตั้งหลังได้จุดตัดจริง · ไม่ deploy บนเซิร์ฟเวอร์ — ใช้โน้ตบุ๊ก + เครื่องสำรอง
 - `08_train_stage2.py` เปลี่ยนชื่อเป็น `09_train_stage2.py` (ให้เลข 08 เป็น check_ready ตามแผน) · เครื่องสำรอง: `11_backup_bundle.py` (zip ไม่มี .env) + `--restore`
 - test `tests/test_ops.py` 14 ตัวผ่าน (เขตเวลา, นาฬิกา, log ตอนเริ่ม, สถานะงานเย็น + รันซ้ำ, แจ้งเตือนล้ม/ซ่อนความลับ, check_ready)
+
+## VM เป็นเครื่องหลัก (1 พ.ย. — โมเดลที่ล็อกไม่เปลี่ยน)
+
+- DigitalOcean Ubuntu 24.04 (สิงคโปร์) = เครื่องหลัก · โน้ตบุ๊ก = สำรอง · กติกาสองเครื่องใน `docs/06_คู่มือวันจริง.md`
+- `scripts/setup_vm.sh` (system / app / harden) + `docs/vm_setup.md` · `requirements-live.txt` ตรึงเวอร์ชันให้ตรงเครื่องที่ล็อกโมเดล (pickle)
+- cron: `scripts/install_cron.sh` (CRON_TZ=Asia/Bangkok, flock ต่องานผ่าน `run_task.sh`, log `outputs/logs/cron_<งาน>.log`)
+- Telegram บังคับ (`08_check_ready.py` FAIL ถ้าไม่ตั้ง) · ทุกข้อความขึ้นต้นด้วย [ชื่อเครื่อง] · ข้อความ "ได้ไฟล์ส่ง" มีทุกคอลัมน์ของไฟล์ส่งครบ 2 หุ้น
+- `11_backup_bundle.py`: log / ร่างของเครื่องต้นทาง → `outputs/logs/from_<เครื่อง>/` (ไม่ทับ) · `--models-only` สำหรับซิงก์หลัง refit · ไม่ซิงก์ β ชั้น 2
+- จุดตัดตั้งจากผลวัดบน VM (2 พ.ย.)

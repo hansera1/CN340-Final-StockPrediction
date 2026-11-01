@@ -137,7 +137,7 @@ def test_check_ready_flags_missing_models(monkeypatch, tmp_path):
     t, _, _ = RD.run_checks(RULES, now="2026-11-01 18:00", settrade=False)
     models = t[t["check"].str.startswith("โมเดล")]
     assert len(models) == 5 and (models["status"] == "FAIL").all()
-    assert set(t["check"]) >= {"เขตเวลา", "นาฬิกา", ".env Settrade", ".env แจ้งเตือน"}
+    assert set(t["check"]) >= {"เขตเวลา", "นาฬิกา", ".env Settrade", ".env แจ้งเตือน Telegram"}
     assert t.loc[t["check"] == "นาฬิกา", "status"].iat[0] == "PASS"
     assert "SECRET" not in t.to_string()
 
@@ -146,3 +146,10 @@ def test_check_ready_clock_fail(monkeypatch):
     monkeypatch.setattr(RD, "clock_skew", lambda: (95.0, "ref"))
     t = pd.DataFrame(RD.check_clock_tz(), columns=["check", "status", "detail"])
     assert t.loc[t["check"] == "นาฬิกา", "status"].iat[0] == "FAIL"
+
+
+def test_every_message_starts_with_host(tmp_path):
+    import platform
+    sent = []
+    notify("ready", "ผลทำนาย", ["KBANK ...", "ADVANC ..."], outbox=tmp_path / "o.jsonl", chans={"t": sent.append})
+    assert sent[0].startswith(f"[{platform.node()}] ")

@@ -1,0 +1,10 @@
+# ระบบวันจริงเท่านั้น (VM / เครื่องสำรอง) — ไม่มี torch / lightgbm / catboost
+# ตรึงเวอร์ชันให้ตรงเครื่องที่ล็อกโมเดล: ไฟล์โมเดล (pickle ของ scikit-learn / numpy) ต้องเปิดด้วยเวอร์ชันเดียวกัน
+numpy==2.3.5
+pandas==2.3.3
+scikit-learn==1.9.1
+scipy==1.17.1
+pyyaml==6.0.3
+settrade_v2==2.2.1
+yfinance==1.3.0
+pytest==9.1.1

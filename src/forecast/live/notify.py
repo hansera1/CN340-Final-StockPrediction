@@ -4,10 +4,13 @@
     NOTIFY_SLACK_WEBHOOK=https://hooks.slack.com/services/...
     NOTIFY_TELEGRAM_BOT_TOKEN=...   และ   NOTIFY_TELEGRAM_CHAT_ID=...
 
+ทุกข้อความขึ้นต้นด้วยชื่อเครื่อง [host] (VM เป็นเครื่องหลัก โน้ตบุ๊กเป็นสำรอง — รู้ว่าข้อความมาจากเครื่องไหน)
+Telegram เป็นช่องทางบังคับ (08_check_ready.py → FAIL ถ้าไม่ได้ตั้ง) · วิธีสร้าง bot: docs/vm_setup.md
 ทุกข้อความถูกเก็บใน outputs/logs/notify_outbox.jsonl (เวลา, ประเภท, ข้อความ, ผลการส่งต่อช่องทาง)
 การส่งล้มทุกแบบถูกจับไว้ → ไม่กระทบการสร้างไฟล์ส่ง · ไม่พิมพ์/บันทึก URL หรือ token (บันทึกแค่ชนิด error / HTTP status)
 """
 import json
+import platform
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -50,7 +53,7 @@ def _safe_error(e):
 def notify(kind, title, lines=(), outbox=None, chans=None):
     """ส่งข้อความ → {ช่องทาง: "ok" / ชนิด error} · ไม่มีวัน raise"""
     try:
-        text = f"{ICON.get(kind, '')} {title}".strip() + ("\n" + "\n".join(str(x) for x in lines) if lines else "")
+        text = f"[{platform.node()}] {ICON.get(kind, '')} {title}" + ("\n" + "\n".join(str(x) for x in lines) if lines else "")
         try:
             chans = channels() if chans is None else chans
         except Exception as e:

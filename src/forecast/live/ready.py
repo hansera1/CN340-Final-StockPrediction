@@ -37,7 +37,10 @@ def check_env():
                              "telegram": ["NOTIFY_TELEGRAM_BOT_TOKEN", "NOTIFY_TELEGRAM_CHAT_ID"]}.items()
              if all(n.get(k) for k in ks)]
     out = [(".env Settrade", "FAIL" if miss else "PASS", f"ขาด {', '.join(miss)}" if miss else "ครบ 4 ค่า")]
-    out.append((".env แจ้งเตือน", "PASS" if chans else "WARN", ", ".join(chans) if chans else "ยังไม่ตั้งช่องทาง (เก็บลง outbox อย่างเดียว)"))
+    # Telegram บังคับ (VM เป็นเครื่องหลัก — กลุ่มต้องเห็นผลและปัญหาทันที) · ช่องทางอื่นเสริม
+    out.append((".env แจ้งเตือน Telegram", "PASS" if "telegram" in chans else "FAIL",
+                ", ".join(chans) if "telegram" in chans else
+                "ยังไม่ตั้ง NOTIFY_TELEGRAM_BOT_TOKEN / NOTIFY_TELEGRAM_CHAT_ID (วิธีทำ: docs/vm_setup.md)"))
     return out
 
 

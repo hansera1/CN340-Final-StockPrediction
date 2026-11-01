@@ -334,10 +334,14 @@ def main():
     if fb:
         warn(["มีรายการที่ใช้ทางสำรอง — ตรวจทุกบรรทัดในคอลัมน์ fallback ก่อนส่ง"] + fb)
     if real:
-        head = f"{args.date} {SESSION_TH[args.session]}: ได้ไฟล์ส่ง {done:%H:%M} (เหลือ {(deadline - done).total_seconds() / 60:.0f} นาที)"
-        notify("ready", head, [f"{r.symbol} {r.direction} P(ขึ้น) {r.p_up:.3f} · ราคา {r.price_quantiles['q50']:g} "
-                               f"[{r.price_quantiles['q25']:g}–{r.price_quantiles['q75']:g}]" for r in records]
-               + [f"ไฟล์ {name} · {_setup.RUN['host']}"])
+        head = (f"ผลทำนาย {args.date} รอบ{SESSION_TH[args.session]} — ได้ไฟล์ส่ง {done:%H:%M} "
+                f"(เหลือ {(deadline - done).total_seconds() / 60:.0f} นาทีก่อนเส้นตาย {deadline:%H:%M})")
+        # ข้อความพร้อมส่งต่ออาจารย์: ทุกคอลัมน์ของไฟล์ส่ง ครบทุกหุ้น (ตรงกับไฟล์ที่ส่ง)
+        body = [" · ".join(f"{c} {v:.2f}" if isinstance(v, float) and c != "P(ขึ้น)" else f"{c} {v}"
+                           for c, v in row.items() if c not in ("วันที่", "รอบ")) for row in rows]
+        missing = [s for s in rules["symbols"] if s not in {r.symbol for r in records}]
+        notify("ready", head + (f" — ⚠ ไม่ครบ: ขาด {', '.join(missing)}" if missing else ""),
+               body + [f"ไฟล์ {name} · เครื่อง {_setup.RUN['host']}" + (" · มี fallback (ดูข้อความถัดไป)" if fb else "")])
         if fb:
             notify("fallback", f"{args.date} {SESSION_TH[args.session]}: ใช้ทางสำรอง — ตรวจก่อนส่ง", fb)
     print(f"รันเงา {len(shadows)} รายการ → {logdir / 'shadow_log.jsonl'} (ไม่ส่ง)")
