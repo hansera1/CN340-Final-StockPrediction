@@ -31,6 +31,11 @@ class PredictionLog:
     p_price: float | None = None         # P(ราคาปลาย > P(c) | ไม่เท่า)
     p_higher: float | None = None        # (1 − p_eq) × p_price
     p_lower: float | None = None
+    point_rule: float | None = None      # ราคาจุดจากกฎค่ามัธยฐาน (ปัดช่อง) — อ้างอิงเมื่อส่งราคาไม่ปัดช่อง (รอบที่ 5 ข้อ B)
+    p_stage1: float | None = None        # E13: P(ขึ้น) ชั้น 1 (fd_lr)
+    p_final: float | None = None         # E13: หลังชั้น 2 (= p_stage1 ถ้าชั้น 2 ใช้ไม่ได้)
+    stage2_betas: dict | None = None
+    stage2_reason: str | None = None     # ว่าง = ชั้น 2 ทำงาน · ไม่ว่าง = เหตุผลที่ p_final = p_stage1
 
 
 @dataclass

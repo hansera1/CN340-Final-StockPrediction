@@ -6,6 +6,8 @@
 - Settrade 30m / 1d, yfinance 1d / 60m / 30m / 15m / 5m / 1m: ทั้งหมดที่ยังดึงได้
 ทุกไฟล์ต่อท้ายแบบไม่ซ้ำ (merge_into_raw) — แถวที่มีอยู่แล้วไม่ถูกแก้
 แหล่งไหนล้มจะข้ามไปแหล่งถัดไป แล้วสรุปท้ายว่าอะไรล้ม
+เก็บสำเร็จ → ร่างรอบเช้าของวันทำการถัดไป (05_predict_live.py morning --draft — รอบที่ 5 ข้อ A5)
+           → ฝึก E13 ชั้น 2 สำหรับรอบบ่ายของวันทำการถัดไป (08_train_stage2.py)
 """
 import argparse
 import subprocess
@@ -42,6 +44,13 @@ def main():
         r = subprocess.run([sys.executable, str(HERE / cmd[0]), *cmd[1:]])
         if r.returncode:
             failed.append(name)
+    if not failed:
+        print("\n## ร่างรอบเช้าของวันทำการถัดไป")
+        if subprocess.run([sys.executable, str(HERE / "05_predict_live.py"), "morning", "--draft"]).returncode:
+            failed.append("ร่างรอบเช้า")
+        print("\n## E13 ชั้น 2 สำหรับรอบบ่ายของวันทำการถัดไป")
+        if subprocess.run([sys.executable, str(HERE / "08_train_stage2.py")]).returncode:
+            failed.append("ชั้น 2 (E13)")
     print("\nสรุป:", "สำเร็จทั้งหมด" if not failed else f"ล้ม: {', '.join(failed)}")
     sys.exit(1 if failed else 0)
 

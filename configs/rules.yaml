@@ -72,6 +72,9 @@ live:
   flat_dir: E9FLAT/adir_lr   # P(นิ่ง) สำหรับกฎ 3 คำตอบ (ใช้เฉพาะเมื่อ three_way.enabled)
   # ข้อ 1ข: ส่ง "เท่าเดิม" ได้ → argmax ของ (1 − f)·p, f, (1 − f)·(1 − p) — เปิดเฉพาะเมื่ออาจารย์อนุญาตและ T1 ผ่าน
   three_way: {enabled: false}
+  # E13 ชั้น 2 รอบบ่าย (results/e13_preregistration.md): shadow = ส่ง p₁ บันทึก p_final · live = ส่ง p_final
+  #   live ใช้เฉพาะเมื่อผ่านเกณฑ์ E-4 ทุกข้อ (หรือข้อยกเว้นตามคำตอบอาจารย์) · ฝึกตอนเย็นวันก่อน → outputs/models/stage2/<วันที่>.json
+  stage2: {enabled: true, mode: shadow, train_days: 20, l2: 45, min_nonflat: 20}
   model_dir: ""              # "" = outputs/models/<spec> · "R4ATC" = ชุดที่ฝึกด้วย label 16:30 = ATC (ใช้คู่ label.price_1630)
   max_price_age_min: 30    # สำหรับรอบบ่าย: ราคา P(c) ต้องไม่เก่ากว่านี้
   # แท่ง 1m ของ "วันนี้" ในวันจริง: ลองตามลำดับ แล้วรวมเป็น data.interval ด้วย aggregate_bars (แบบ yfinance)
@@ -83,6 +86,10 @@ live:
   #   P(ขึ้น) > 0.5 + margin → P(c) + 1 ช่อง · P(ขึ้น) < 0.5 − margin → P(c) − 1 ช่อง
   #   นอกนั้นใช้กฎค่ามัธยฐาน แต่ถ้ากฎเลื่อนสวนทิศทาง → P(c)
   price_consistency: {enabled: false, margin: 0.05}
+  # ข้อ B รอบที่ 5 — อาจารย์ให้ส่งทศนิยมได้: ราคา = P(c)·exp(P(สูงกว่า)·E[z|สูงกว่า] + P(ต่ำกว่า)·E[z|ต่ำกว่า])
+  #   (E[z|·] จากประวัติก่อนวันที่ทาย แยกหุ้น/รอบ) ไม่ปัดช่อง · ราคาปัดช่องจากกฎค่ามัธยฐานอยู่ใน log (point_rule)
+  #   ใช้แทน price_consistency (ถ้าเปิดทั้งคู่ ใช้อันนี้)
+  price_decimal: {enabled: false}
   # ข้อมูลรายวันของวันทำการก่อนยังไม่มา (ข้อ 3): ดึงซ้ำ → สร้างจากแหล่งสำรอง → ส่งด้วยข้อมูลล่าสุดที่มี
   daily_check:
     refetch_attempts: 2      # ขั้น 2: ดึงซ้ำกี่ครั้ง

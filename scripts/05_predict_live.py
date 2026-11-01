@@ -15,6 +15,12 @@
 
 → <submission.dir>/<submission.filename>  (ไฟล์ส่งอาจารย์ — รูปแบบใน rules.yaml → submission)
 → <ไฟล์ส่ง>_detail.csv                      (คอลัมน์ตรวจสอบ ไม่ส่ง)
+
+ร่างรอบเช้า (รอบที่ 5 ข้อ A5) — feature รอบเช้าใช้ข้อมูลถึงราคาปิดเมื่อวานเท่านั้น จึงคำนวณได้ตั้งแต่เย็นวันก่อน:
+    python scripts/05_predict_live.py morning --draft      # หลัง 00_collect_daily.py (ทำให้อัตโนมัติแล้ว)
+    → outputs/predictions/draft/<วันทำการถัดไป>_morning.csv (+ _detail.csv, .jsonl) — ไม่ลง log ส่งจริง
+  เช้าวันจริง: รันปกติแล้วเทียบกับร่าง (ตรง → ส่งได้ทันที · ต่าง → ใช้ผลตอนเช้า + เหตุผลใน fallback_reason)
+  รันตอนเช้าล้ม → ใช้ร่างเป็นไฟล์ส่ง พร้อม fallback_reason
 → outputs/logs/predictions.jsonl            (log ก่อนรู้ผล ห้ามแก้)
 → outputs/logs/shadow_log.jsonl             (รันเงา E0-ud + ราคาล่าสุด — ห้ามส่ง ใช้เทียบในรายงานเท่านั้น)
 """
@@ -28,8 +34,8 @@ import pandas as pd
 
 from forecast.config import INTERVAL_MIN, OUTPUT_DIR, RAW_DIR, ROOT, load_rules, raw_source_dir, session_times
 from forecast.data.io import drop_unfinished, merge_into_raw, raw_path
-from forecast.live.daily_check import build_fallback_root, missing_daily, prev_trading_day
-from forecast.live.log_schema import append_log
+from forecast.live.daily_check import build_fallback_root, missing_daily, next_trading_day, prev_trading_day
+from forecast.live.log_schema import PredictionLog, append_log, read_logs
 from forecast.live.predict import predict_session
 
 SESSION_TH = {"morning": "เช้า", "afternoon": "บ่าย"}
@@ -157,32 +163,104 @@ def ensure_daily(rules, args, date, session):
     return out_root, reasons
 
 
+def draft_path(date):
+    return OUTPUT_DIR / "predictions" / "draft" / f"{date:%Y-%m-%d}_morning.jsonl"
+
+
+def same_as_draft(r, d):
+    """ทิศทาง P(ขึ้น) และราคาทุก quantile ตรงกับร่าง → (ตรงไหม, รายการที่ต่าง)"""
+    diff = []
+    if r.direction != d.direction or abs(r.p_up - d.p_up) > 1e-9:
+        diff.append(f"P(ขึ้น) {d.p_up:.4f} → {r.p_up:.4f}")
+    for k, v in r.price_quantiles.items():
+        if abs(v - d.price_quantiles[k]) > 1e-9:
+            diff.append(f"{k} {d.price_quantiles[k]:g} → {v:g}")
+    return not diff, diff
+
+
+def compare_draft(records, date):
+    path = draft_path(date)
+    if not path.exists():
+        print(f"ไม่มีร่างเย็นวันก่อน ({path.name})")
+        return
+    drafts = {d["symbol"]: PredictionLog(**d) for d in read_logs(path)}
+    lines = []
+    for r in records:
+        d = drafts.get(r.symbol)
+        if d is None:
+            continue
+        ok, diff = same_as_draft(r, d)
+        lines.append(f"{r.symbol}: " + ("ตรงกับร่าง" if ok else "ต่างจากร่าง — " + ", ".join(diff)))
+        if not ok:
+            r.fallback_reason = "; ".join(filter(None, [r.fallback_reason, "ต่างจากร่างเย็นวันก่อน (ใช้ผลตอนเช้า): " +
+                                                         ", ".join(diff)]))
+    print("เทียบร่างเย็นวันก่อน: " + " · ".join(lines))
+
+
+def from_draft(date, err):
+    """รันตอนเช้าล้ม → ใช้ร่างเย็นวันก่อนเป็นผลส่ง"""
+    path = draft_path(date)
+    if not path.exists():
+        raise SystemExit(f"รันล้ม ({err}) และไม่มีร่างเย็นวันก่อน — ใช้แผนสำรองในคู่มือ (กรอกมือ)")
+    out = []
+    for d in read_logs(path):
+        r = PredictionLog(**d)
+        r.generated_at = str(datetime.now())
+        r.fallback_reason = "; ".join(filter(None, [r.fallback_reason, f"ใช้ร่างเย็นวันก่อน (รันตอนเช้าล้ม: {err})"]))
+        out.append(r)
+    warn(["รันตอนเช้าล้ม → ใช้ร่างเย็นวันก่อนเป็นไฟล์ส่ง", err])
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("session", choices=["morning", "afternoon"])
-    ap.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"))
+    ap.add_argument("--date", help="default = วันนี้ (--draft: วันทำการถัดไป)")
     ap.add_argument("--now", help="จำลองเวลาปัจจุบัน (ทดสอบย้อนหลัง)")
     ap.add_argument("--data-root", type=Path, help="โฟลเดอร์แทน data/raw (มี settrade/ yfinance/) — ใช้ซ้อม")
     ap.add_argument("--no-fetch", action="store_true", help="ไม่ดึงข้อมูลใหม่ ใช้ไฟล์ที่มีอยู่")
+    ap.add_argument("--draft", action="store_true", help="ร่างรอบเช้าของวันทำการถัดไป (รันตอนเย็นหลังเก็บข้อมูล)")
     args = ap.parse_args()
     rules = load_rules()
     t0 = time.perf_counter()
+    if not args.draft:
+        args.date = args.date or datetime.now().strftime("%Y-%m-%d")
+    if args.draft:
+        if args.session != "morning":
+            raise SystemExit("--draft ใช้กับรอบเช้าเท่านั้น")
+        args.date = args.date or f"{next_trading_day(datetime.now()):%Y-%m-%d}"
+        args.no_fetch = True
+        args.now = args.now or f"{args.date} {rules['sessions']['morning']['cutoff']}"
     if not args.no_fetch and args.data_root is None:
         fetch_today(rules)
     date = pd.Timestamp(args.date)
     data_root, extra = ensure_daily(rules, args, date, args.session)
 
-    records, shadows = predict_session(args.session, args.date, rules, now=args.now, data_root=data_root,
-                                       extra_reasons=extra)
-    # จำลองเวลา (--now) = ทดสอบย้อนหลัง/ซ้อม → log แยก ไม่ปนกับ log ส่งจริง
-    logdir = OUTPUT_DIR / "logs" / ("dryrun" if args.now else "")
-    for sh in shadows:
+    try:
+        records, shadows = predict_session(args.session, args.date, rules, now=args.now, data_root=data_root,
+                                           extra_reasons=extra)
+    except Exception as e:
+        if args.session != "morning" or args.draft:
+            raise
+        records, shadows = from_draft(date, f"{type(e).__name__}: {str(e)[:120]}"), []
+    else:
+        if args.session == "morning" and not args.draft:
+            compare_draft(records, date)
+    # จำลองเวลา (--now) = ทดสอบย้อนหลัง/ซ้อม → log แยก ไม่ปนกับ log ส่งจริง · ร่างไม่ลง log
+    kind = "draft" if args.draft else "dryrun" if args.now else ""
+    logdir = OUTPUT_DIR / "logs" / kind
+    if args.draft:
+        draft_path(date).unlink(missing_ok=True)
+    for sh in shadows if not args.draft else []:
         append_log(logdir / "shadow_log.jsonl", sh)
     sub = rules["submission"]
     rows, detail = [], []
     for r in records:
-        r.submitted_at = str(datetime.now())
-        append_log(logdir / "predictions.jsonl", r)
+        if args.draft:
+            append_log(draft_path(date), r)
+        else:
+            r.submitted_at = str(datetime.now())
+            append_log(logdir / "predictions.jsonl", r)
         p = r.price_quantiles
         rows.append({name: COLUMNS[key](r, p) for name, key in sub["columns"].items()})
         detail.append({
@@ -195,12 +273,16 @@ def main():
             "P(สูงกว่า)": None if r.p_higher is None else round(r.p_higher, 3),
             "P(ต่ำกว่า)": None if r.p_lower is None else round(r.p_lower, 3),
             "แหล่งข้อมูลวันนี้": r.data_source, "อายุข้อมูล (นาที)": None if r.data_age_min is None else round(r.data_age_min),
+            "ราคาปัดช่อง (กฎ)": r.point_rule,
+            "p ชั้น 1": None if r.p_stage1 is None else round(r.p_stage1, 4),
+            "p ชั้น 2 (E13)": None if r.p_final is None else round(r.p_final, 4),
+            "ชั้น 2 หมายเหตุ": r.stage2_reason or "",
             "fallback": r.fallback_reason or "",
         })
 
     table, detail = pd.DataFrame(rows), pd.DataFrame(detail)
     name = sub["filename"].format(date=args.date, session=args.session, session_th=SESSION_TH[args.session])
-    out = ROOT / sub["dir"] / ("dryrun" if args.now else "") / name
+    out = ROOT / sub["dir"] / kind / name
     out.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(out, index=False, encoding="utf-8-sig")
     if sub.get("detail"):
@@ -217,6 +299,9 @@ def main():
     deadline = session_times(rules, args.session, date)["deadline"]
     done = (pd.Timestamp(args.now).tz_localize(rules["timezone"]) + pd.Timedelta(seconds=run_sec) if args.now
             else pd.Timestamp.now(tz=rules["timezone"]))
+    if args.draft:
+        print(f"ร่างรอบเช้าของ {args.date} → {draft_path(date)} (ไม่ลง log ส่งจริง)")
+        return
     print(f"ได้ไฟล์ส่ง {done:%H:%M:%S} — ก่อนเส้นตาย {deadline:%H:%M} อยู่ {(deadline - done).total_seconds() / 60:.1f} นาที"
           + (" (เวลาจำลอง + เวลารันจริง)" if args.now else ""))
     if detail["fallback"].astype(bool).any():

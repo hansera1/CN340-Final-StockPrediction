@@ -35,6 +35,14 @@ def prev_trading_day(date, holidays=None):
     return d
 
 
+def next_trading_day(date, holidays=None):
+    holidays = market_holidays() if holidays is None else holidays
+    d = pd.Timestamp(date).tz_localize(None).normalize() + pd.Timedelta(days=1)
+    while d.dayofweek >= 5 or d in holidays:
+        d += pd.Timedelta(days=1)
+    return d
+
+
 def _days(path):
     if not path.exists():
         return set()

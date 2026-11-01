@@ -1,0 +1,2 @@
+﻿cutoff,n_days,n_symbol_days,n_bars,share_bars_within_1_tick,max_diff_ticks,f5_signs_all_match,pass
+12:15,5,10,300,1.0,0.0,True,True
