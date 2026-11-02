@@ -103,7 +103,8 @@ cd ~/kbank_advanc_forecast
 # เสนอจุดตัดจากผลของ VM (latency.csv / run_time.csv บันทึกชื่อเครื่องทุกแถว)
 .venv/bin/python scripts/07_propose_cutoff.py
 ```
-ตั้งจุดตัดใน `rules.yaml` จากผลของ VM → `results/latency_2026-11-02.md` → `install_cron.sh --with-predict` (VM) และ `setup_tasks.ps1 -WithPredict` (โน้ตบุ๊ก)
+ตั้งจุดตัดใน `rules.yaml` จากผลของ VM → `results/latency_2026-11-02.md` (ผล: คง 09:15 / 12:15) → `install_cron.sh --with-predict` (VM)
+โน้ตบุ๊กไม่ตั้งรอบทำนายและงานเย็นอัตโนมัติ (เรียก Settrade API ด้วยรหัสเดียวกันพร้อม VM ในวินาทีเดียวกัน + แจ้งเตือนซ้ำ) — รันมือตามกติกาสองเครื่อง
 แล้วทำตามแผนรอบที่ 6 ต่อ (ภาคผนวก E13 ต้อง commit ก่อนรัน backtest)
 
 ## 9. หลัง refit ศ. 6 พ.ย. — ซิงก์โมเดล
