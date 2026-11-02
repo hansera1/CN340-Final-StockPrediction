@@ -153,3 +153,45 @@ def test_every_message_starts_with_host(tmp_path):
     sent = []
     notify("ready", "ผลทำนาย", ["KBANK ...", "ADVANC ..."], outbox=tmp_path / "o.jsonl", chans={"t": sent.append})
     assert sent[0].startswith(f"[{platform.node()}] ")
+
+
+class _FakeMarket:
+    """API จำลอง: วันก่อน `oldest` โยน error (แบบ VM 2 พ.ย.), วันอื่นคืน 2 แท่ง"""
+    def __init__(self, oldest, fail_all=False):
+        self.oldest, self.fail_all = pd.Timestamp(oldest), fail_all
+
+    def get_candlestick(self, symbol, interval, limit, start, end, normalized):
+        d = pd.Timestamp(start[:10])
+        if self.fail_all or d < self.oldest:
+            raise RuntimeError("range not available")
+        t = [(d + pd.Timedelta(hours=3, minutes=m)).tz_localize("Asia/Bangkok").timestamp() for m in (0, 1)]
+        return {"time": t, "open": [1, 1], "high": [1, 1], "low": [1, 1], "close": [1, 1], "volume": [1, 1]}
+
+
+def test_fetch_days_skips_old_day_errors():
+    from forecast.data.settrade import failed_days, fetch_days
+    rules, dates = load_rules(), pd.bdate_range("2026-10-26", "2026-11-02")
+    frames, empty, errors = fetch_days(_FakeMarket("2026-10-29"), "KBANK", dates, rules)
+    assert [d.date().isoformat() for d, _ in errors] == ["2026-10-26", "2026-10-27", "2026-10-28"]
+    assert len(frames) == 3 and empty == 3
+    assert not failed_days(dates, errors)                 # error เฉพาะวันเก่า = ปกติ
+
+
+def test_daily_bar_kept_after_close_not_midnight():
+    from forecast.data.io import drop_unfinished
+    rules = load_rules()
+    d = pd.DataFrame({"timestamp": pd.to_datetime(["2026-10-30", "2026-11-02"])})
+    kept = lambda now: drop_unfinished(d, rules, pd.Timestamp(now), 1440)["timestamp"].dt.date.astype(str).tolist()
+    assert kept("2026-11-02 16:30") == ["2026-10-30"]                 # ATC ยังไม่จบ → ยังไม่เก็บวันนี้
+    assert kept("2026-11-02 17:30") == ["2026-10-30", "2026-11-02"]   # งานเย็นเก็บวันนี้ได้
+    m = pd.DataFrame({"timestamp": pd.to_datetime(["2026-11-02 12:14", "2026-11-02 12:15"])})
+    assert len(drop_unfinished(m, rules, pd.Timestamp("2026-11-02 12:15"), 1)) == 1   # 1m เหมือนเดิม
+
+
+def test_fetch_days_fails_when_latest_or_all_fail():
+    from forecast.data.settrade import failed_days, fetch_days
+    rules, dates = load_rules(), pd.bdate_range("2026-10-29", "2026-11-02")
+    _, _, errors = fetch_days(_FakeMarket("2026-11-03"), "KBANK", dates, rules)   # วันล่าสุด error
+    assert failed_days(dates, errors)
+    _, _, errors = fetch_days(_FakeMarket("2026-10-01", fail_all=True), "KBANK", dates, rules)
+    assert failed_days(dates, errors)

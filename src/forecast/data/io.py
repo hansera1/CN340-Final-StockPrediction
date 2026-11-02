@@ -7,9 +7,10 @@ bar_end ของแท่งที่คร่อมเวลาปิดภา
 """
 import pandas as pd
 
-from forecast.config import interval_minutes, raw_source_dir
+from forecast.config import INTERVAL_MIN, interval_minutes, raw_source_dir
 
 OHLCV = ["open", "high", "low", "close", "volume"]
+DAILY_FINAL = pd.Timedelta(hours=17)   # แท่งรายวันถือว่าจบ 17:00 (ATC จบ ~16:40)
 
 
 def raw_path(symbol, rules, raw_dir=None, interval=None):
@@ -89,7 +90,12 @@ def aggregate_bars(bars, minutes, rules):
 
 
 def drop_unfinished(df, rules, now, minutes):
-    """ตัดแท่งที่ยังไม่จบ ณ เวลาที่ดึง (คอลัมน์ timestamp เวลาไทยไม่มี tz) — ไม่ให้ค่าครึ่งแท่งถูกบันทึกถาวร"""
+    """ตัดแท่งที่ยังไม่จบ ณ เวลาที่ดึง (คอลัมน์ timestamp เวลาไทยไม่มี tz) — ไม่ให้ค่าครึ่งแท่งถูกบันทึกถาวร
+
+    แท่งรายวันจบที่ DAILY_FINAL (หลัง ATC ~16:40 ราคาปิดทางการออกแล้ว) ไม่ใช่เที่ยงคืน
+    — เดิมงานเย็น 17:30 ทิ้งแท่งของวันนั้น ร่างรอบเช้าจึงใช้ข้อมูลรายวันล้า 1 วัน (VM 2 พ.ย.)"""
+    if minutes >= INTERVAL_MIN["1d"]:
+        return df[df["timestamp"].dt.normalize() + DAILY_FINAL <= now]
     freq = pd.Timedelta(minutes=minutes)
     end = df["timestamp"] + (freq if rules["bar_timestamp"] == "start" else pd.Timedelta(0))
     return df[end <= now]

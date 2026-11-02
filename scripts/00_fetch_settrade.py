@@ -12,6 +12,7 @@
 → ต้องรันทุกวันเพื่อสะสมรายนาที ข้อมูลที่หลุดช่วงไปแล้วดึงคืนไม่ได้
 """
 import argparse
+import sys
 import time
 
 import _setup  # noqa: F401
@@ -20,7 +21,7 @@ import pandas as pd
 from forecast.config import INTERVAL_MIN, OUTPUT_DIR, load_rules, raw_source_dir
 from forecast.data.io import drop_unfinished, merge_into_raw, raw_path
 from forecast.data.latency import measure_latency, summarize_latency
-from forecast.data.settrade import candles_to_frame, connect, fetch_day, fetch_last, fetch_latest
+from forecast.data.settrade import candles_to_frame, connect, failed_days, fetch_days, fetch_last, fetch_latest
 
 SOURCE = "settrade"
 
@@ -74,21 +75,28 @@ def main():
     if not args.start:
         ap.error("ต้องระบุ --start (หรือ --probe / --latency / --interval)")
     dates = pd.bdate_range(day(args.start), day(args.end))
+    failed = []
     for sym in symbols:
-        frames, empty = [], 0
-        for i, d in enumerate(dates, 1):
-            df = fetch_day(market, sym, d, rules)
-            if df.empty:
-                empty += 1                       # วันหยุดหรือไม่มีข้อมูลย้อนหลังถึง
-            frames.append(df)
-            print(f"\r  {sym} {d.date()} ({i}/{len(dates)})", end="", flush=True)
+        def progress(d, n=iter(range(1, len(dates) + 1))):
+            print(f"\r  {sym} {d.date()} ({next(n)}/{len(dates)})", end="", flush=True)
             time.sleep(args.sleep)
-        new = drop_unfinished(pd.concat(frames, ignore_index=True), rules, now(), 1)
-        added, diff = merge_into_raw(raw_path(sym, rules, out_dir, "1m"), new)
+        frames, empty, errors = fetch_days(market, sym, dates, rules, progress)   # วันว่าง = วันหยุด / ย้อนไม่ถึง
+        if frames:
+            new = drop_unfinished(pd.concat(frames, ignore_index=True), rules, now(), 1)
+            added, diff = merge_into_raw(raw_path(sym, rules, out_dir, "1m"), new)
+        else:
+            new, added, diff = [], 0, 0
         print(f"\r  {sym}: ได้ {len(new)} แท่ง, เพิ่มใหม่ {added}, วันที่ไม่มีข้อมูล {empty}/{len(dates)}"
               + (f", ⚠️ ค่าไม่ตรงของเดิม {diff} จุด (เก็บของเดิมไว้)" if diff else ""))
         if len(new):
             print(f"      ข้อมูลเก่าสุดที่ได้: {new['timestamp'].min()}")
+        if errors:
+            print("      API error: " + ", ".join(f"{d.date()} ({e})" for d, e in errors)
+                  + (" ← วันล่าสุด/ทุกวัน = ล้ม" if failed_days(dates, errors) else " (วันเก่าเกินที่ API เก็บ — ข้าม)"))
+        if failed_days(dates, errors):
+            failed.append(sym)
+    if failed:
+        sys.exit(f"ดึง 1m ไม่สำเร็จ: {', '.join(failed)}")
 
 
 if __name__ == "__main__":
