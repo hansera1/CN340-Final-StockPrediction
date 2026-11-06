@@ -47,8 +47,11 @@ def check_models(rules):
     out = []
     for k, spec in live_specs(rules).items():
         trained, bad = set(), []
+        sessions = [s for s in rules["sessions"] if k.startswith(s)] or list(rules["sessions"])   # ช่องของรอบใด ตรวจเฉพาะรอบนั้น
+        n = 0
         for sym in rules["symbols"]:
-            for sess in rules["sessions"]:
+            for sess in sessions:
+                n += 1
                 p = OUTPUT_DIR / "models" / spec / f"{sym}_{sess}.pkl"
                 try:
                     with open(p, "rb") as f:
@@ -56,7 +59,7 @@ def check_models(rules):
                 except Exception as e:
                     bad.append(f"{sym}_{sess} ({type(e).__name__})")
         out.append((f"โมเดล {k} ({spec})", "FAIL" if bad else "PASS",
-                    f"โหลดไม่ได้: {', '.join(bad)}" if bad else f"4 ไฟล์ trained_until {', '.join(sorted(trained))}"))
+                    f"โหลดไม่ได้: {', '.join(bad)}" if bad else f"{n} ไฟล์ trained_until {', '.join(sorted(trained))}"))
     return out
 
 

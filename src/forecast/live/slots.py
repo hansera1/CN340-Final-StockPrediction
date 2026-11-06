@@ -52,7 +52,8 @@ def lock_specs(rules):
     """spec (ไม่มี model_dir) ที่ 04_lock_model.py ต้องฝึก เรียงไม่ซ้ำ"""
     live, out = rules["live"], []
     for s in rules["sessions"]:
-        out.append(live["models"][f"{s}_dir"])
+        if direction_target(rules, s) == "up_down":      # up_notup ล็อกแยก (04 --target up_notup / 14_lock_e15_mlp.py)
+            out.append(live["models"][f"{s}_dir"])
     for s in rules["sessions"]:
         out += [live["models"][f"{s}_price"]["eq"], live["models"][f"{s}_price"]["up"]]
     return list(dict.fromkeys(out + [live["shadow"], live["flat_dir"]]))

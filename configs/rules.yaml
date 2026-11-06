@@ -65,11 +65,11 @@ evaluation:
 
 live:
   # โมเดลที่ล็อก (NEXT_STEPS รอบที่ 3 ข้อ 3 → results/lock_decision.md) — bundle ที่ outputs/models/<E>/<variant>/
-  # รอบ 7 ข้อ 4 (live/slots.py): ทุกช่องตั้งค่าตั้งต้น (A-ud / PR-A) จนกว่าเจ้าของโปรเจกต์สั่ง · E16 ไม่ผ่าน → คง up_down ทั้งสองรอบ
-  direction_target: {morning: up_down, afternoon: up_down}   # up_down | up_notup (โฟลเดอร์ <model_dir>_UN)
+  # รอบ 7 (live/slots.py, results/decision_4slots.md): เจ้าของโปรเจกต์สั่ง 7 พ.ย. — รอบบ่ายใช้ E15 MLP · ช่องอื่นคงค่าตั้งต้น (A-ud / PR-A)
+  direction_target: {morning: up_down, afternoon: up_notup}   # up_down | up_notup (โฟลเดอร์ <model_dir>_UN)
   models:
     morning_dir: E12/fd_lr      # ทิศทาง: E12 F0 + F-daily, LR · ทางสุดท้าย = E0-ud จากประวัติ
-    afternoon_dir: E12/fd_lr
+    afternoon_dir: E15/mlp      # scripts/14_lock_e15_mlp.py · ทาย "ลง" เกือบทุกรอบ ไม่ชนะ E0-un อย่างมีนัยสำคัญ
     # eq = P(ราคาปลาย = P(c)) · up = P(ราคาปลาย > P(c) | ไม่เท่า) → กฎค่ามัธยฐาน
     morning_price: {eq: E9FLAT/aprice_lr, up: E9FLAT/pprice_lr}
     afternoon_price: {eq: E9FLAT/aprice_lr, up: E9FLAT/pprice_lr}

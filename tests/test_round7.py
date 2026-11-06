@@ -68,16 +68,18 @@ def _rules():
     return load_rules()
 
 
-def test_defaults_are_a_ud_and_pr_a_for_all_slots():
-    from forecast.live.slots import direction_spec, direction_target, live_specs, price_specs
+def test_slots_match_owner_decision():
+    """7 พ.ย.: บ่ายใช้ E15 MLP (up_notup) · เช้าคง A-ud · ราคาคง PR-A"""
+    from forecast.live.slots import direction_spec, direction_target, live_specs, lock_specs, price_specs
     r = _rules()
     assert r["live"].get("shadow_slots") == []
+    assert direction_target(r, "morning") == "up_down" and direction_spec(r, "morning") == "R4ATC/E12/fd_lr"
+    assert direction_target(r, "afternoon") == "up_notup" and direction_spec(r, "afternoon") == "R4ATC_UN/E15/mlp"
     for s in ("morning", "afternoon"):
-        assert direction_target(r, s) == "up_down"
-        assert direction_spec(r, s) == "R4ATC/E12/fd_lr"
         assert price_specs(r, s) == ("R4ATC/E9FLAT/aprice_lr", "R4ATC/E9FLAT/pprice_lr")
-    assert set(live_specs(r).values()) == {"R4ATC/E12/fd_lr", "R4ATC/E9FLAT/aprice_lr", "R4ATC/E9FLAT/pprice_lr",
+    assert set(live_specs(r).values()) == {"R4ATC/E12/fd_lr", "R4ATC_UN/E15/mlp", "R4ATC/E9FLAT/aprice_lr", "R4ATC/E9FLAT/pprice_lr",
                                            "R4ATC/E9/baseline_ud", "R4ATC/E9FLAT/adir_lr"}
+    assert "E15/mlp" not in lock_specs(r)          # ล็อกแยกด้วย scripts/14_lock_e15_mlp.py ไม่ใช่ 04_lock_model.py
 
 
 def test_up_notup_uses_own_folder_per_session():
@@ -86,9 +88,11 @@ def test_up_notup_uses_own_folder_per_session():
     import pytest
     from forecast.live.slots import direction_spec
     r = copy.deepcopy(_rules())
-    r["live"]["direction_target"]["afternoon"] = "up_notup"
+    r["live"]["models"]["afternoon_dir"] = "E12/fd_lr"
     assert direction_spec(r, "morning") == "R4ATC/E12/fd_lr"
     assert direction_spec(r, "afternoon") == "R4ATC_UN/E12/fd_lr"
+    r["live"]["direction_target"]["afternoon"] = "up_down"
+    assert direction_spec(r, "afternoon") == "R4ATC/E12/fd_lr"
     r["live"]["direction_target"]["morning"] = "x"
     with pytest.raises(ValueError):
         direction_spec(r, "morning")
