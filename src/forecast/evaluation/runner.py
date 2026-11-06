@@ -26,10 +26,12 @@ def variant_interval(rules, exp, variant):
 
 
 def label_tag(rules):
-    """ชื่อ cache ของนิยาม label ที่ไม่ใช่ค่าเดิม (รอบที่ 4: ราคาปิดทางการ / ATC) — ไม่ปนกับ cache เดิม"""
+    """ชื่อ cache ของนิยาม label / จุดตัดที่ไม่ใช่ค่าเดิม (รอบที่ 4: ราคาปิดทางการ / ATC · จุดตัดบ่าย) — ไม่ปนกับ cache เดิม"""
     lab = rules["label"]
+    cut = rules["sessions"]["afternoon"]["cutoff"]
     return (("_pcoff" if lab.get("p_ref_morning", "last_bar_close") == "official_close" else "") +
-            ("_atc" if lab["price_1630"] == "closing_auction" else ""))
+            ("_atc" if lab["price_1630"] == "closing_auction" else "") +
+            ("" if cut == "12:15" else f"_c{cut.replace(':', '')}"))
 
 
 def load_or_build_dataset(rules, feature_minutes=None, spectral=False, raw_dir=None, rebuild=False,

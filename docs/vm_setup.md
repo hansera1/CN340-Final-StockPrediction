@@ -74,7 +74,7 @@ zip มีโมเดลที่ล็อก (รวม R4ATC), ข้อม�
 ## 6. ตั้งเวลา (cron)
 
 ```bash
-bash scripts/install_cron.sh                  # งานเย็น 17:30 + watchdog 09:20 / 12:20 (จันทร์–ศุกร์)
+bash scripts/install_cron.sh                  # งานเย็น 17:30 + watchdog 09:20 / 12:50 (จันทร์–ศุกร์)
 bash scripts/install_cron.sh --with-predict   # หลังตั้งจุดตัดจริง: + รอบเช้า/บ่ายตามจุดตัด
 crontab -l                                    # ตรวจ
 ```
@@ -98,18 +98,18 @@ cd ~/kbank_advanc_forecast
 # ~10:30 และ ~14:30 (ช่วงตลาดเปิด)
 .venv/bin/python scripts/00_fetch_settrade.py --latency 30
 .venv/bin/python scripts/00_fetch_yfinance.py --latency 30
-# 12:15 — จับเวลารอบบ่ายจริงบน VM (ดึงข้อมูล + ทำนาย)
+# ตอนจุดตัดบ่าย — จับเวลารอบบ่ายจริงบน VM (ดึงข้อมูล + ทำนาย)
 .venv/bin/python scripts/05_predict_live.py afternoon
 # เสนอจุดตัดจากผลของ VM (latency.csv / run_time.csv บันทึกชื่อเครื่องทุกแถว)
 .venv/bin/python scripts/07_propose_cutoff.py
 ```
-ตั้งจุดตัดใน `rules.yaml` จากผลของ VM → `results/latency_2026-11-02.md` (ผล: คง 09:15 / 12:15) → `install_cron.sh --with-predict` (VM)
+ตั้งจุดตัดใน `rules.yaml` จากผลของ VM → `results/latency_2026-11-02.md` (ผล: 09:15 · บ่ายย้ายเป็น 12:35 เมื่อ 6 พ.ย. หลังเส้นตายเปลี่ยนเป็น 13:00) → `install_cron.sh --with-predict` (VM)
 โน้ตบุ๊กไม่ตั้งรอบทำนายและงานเย็นอัตโนมัติ (เรียก Settrade API ด้วยรหัสเดียวกันพร้อม VM ในวินาทีเดียวกัน + แจ้งเตือนซ้ำ) — รันมือตามกติกาสองเครื่อง
 แล้วทำตามแผนรอบที่ 6 ต่อ (ภาคผนวก E13 ต้อง commit ก่อนรัน backtest)
 
 ## 9. หลัง refit ศ. 6 พ.ย. — ซิงก์โมเดล
 
-refit ทำที่โน้ตบุ๊ก (`python scripts/04_lock_model.py`) แล้ว:
+refit ทำที่โน้ตบุ๊ก (`python scripts/04_lock_model.py --atc`) แล้ว:
 ```powershell
 python scripts/11_backup_bundle.py --models-only
 scp outputs\backup\backup_models_<เครื่อง>_<เวลา>.zip forecast@<VM_IP>:~/

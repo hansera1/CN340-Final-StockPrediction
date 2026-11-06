@@ -22,6 +22,9 @@ def synthetic_bars(start_price, n_days, seed):
 def rules():
     r = load_rules()
     r["bar_timestamp"] = "end"          # synthetic_bars ใช้เวลาจบแท่ง (10:01 … 16:30)
+    # ข้อมูลจำลองไม่มีราคาปิดทางการรายวัน → test ของ pipeline ใช้ label จากแท่ง และจุดตัด 12:15 คงที่
+    r["label"]["price_1630"] = "last_trade_at_or_before"
+    r["sessions"]["afternoon"]["cutoff"] = "12:15"
     r["data"] = {"source": "_synthetic", "interval": "1m"}
     r["evaluation"].update(min_train_days=20, test_block_days=5, holdout_days=5, n_boot=50)
     return r

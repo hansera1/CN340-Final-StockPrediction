@@ -1,3 +1,4 @@
+import numpy as np
 """รวมแท่ง 1m → 60m แบบ yfinance และความสอดคล้องระหว่าง backtest (ไฟล์ 60m) กับวันจริง (1m วันนี้)"""
 import pandas as pd
 import pytest
@@ -94,3 +95,28 @@ def test_stale_source_falls_back(sources):
     _, meta = live_bars("KBANK", r, date, cutoff, dirs["yfinance"], dirs)
     assert meta["source"] == "yfinance" and meta["lag_sec"] == 0
     assert "settrade: แท่งล่าสุดเก่า" in meta["skipped"][0]
+
+
+def test_cutoff_after_morning_close_uses_full_morning_only(sources):
+    """จุดตัด 12:35: แท่ง 60m 12:00 (จบ 12:30) ถูกใช้ แต่ข้อมูลบ่ายต้องไม่รั่วเข้า features รอบบ่ายของวันนั้น"""
+    r, dirs, none = sources
+    r = {**r, "sessions": {**r["sessions"], "afternoon": {**r["sessions"]["afternoon"], "cutoff": "12:35"}}}
+    base = assemble_dataset(r, raw_dir=dirs["yfinance"], ext_dir=none)
+    date = base["date"].drop_duplicates().iloc[30]
+    key = lambda d: (d["date"] == date) & (d["session"] == "afternoon")
+    cols = feature_cols(base)
+
+    def changed(hhmm):
+        for sym in r["symbols"]:
+            path = dirs["yfinance"] / f"{sym}_60m.csv"
+            df = pd.read_csv(path, parse_dates=["timestamp"])
+            hit = df["timestamp"] == date.tz_localize(None) + pd.Timedelta(hhmm)
+            assert hit.any()
+            df.loc[hit, ["open", "high", "low", "close"]] *= 1.5
+            df.to_csv(path, index=False)
+        moved = assemble_dataset(r, raw_dir=dirs["yfinance"], ext_dir=none)
+        a, b = base.loc[key(base), cols].astype(float), moved.loc[key(moved), cols].astype(float)
+        return not np.allclose(a.to_numpy(), b.to_numpy(), equal_nan=True)
+
+    assert not changed("14:00:00")      # แท่งบ่ายไม่รั่ว
+    assert changed("12:00:00")          # แท่งท้ายภาคเช้าถูกใช้แล้ว

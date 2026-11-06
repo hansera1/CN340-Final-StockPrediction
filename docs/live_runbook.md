@@ -1,14 +1,14 @@
 # Runbook วันส่งจริง 9–13 พ.ย. 2026
 
-ส่งก่อน **09:30** (รอบเช้า) และ **12:30** (รอบบ่าย) ทุกวัน · ส่งด้วยโมเดลที่ล็อกเท่านั้น (ห้ามส่ง baseline / ผลรันเงา)
+ส่งก่อน **09:30** (รอบเช้า) และ **13:00** (รอบบ่าย) ทุกวัน · ส่งด้วยโมเดลที่ล็อกเท่านั้น (ห้ามส่ง baseline / ผลรันเงา)
 รายละเอียดระบบ: `docs/06_คู่มือวันจริง.md` · เหตุผลการล็อก: `results/lock_decision.md`
 
 ## ลำดับงานต่อวัน
 
 | เวลา | คำสั่ง | ตรวจ |
 |---|---|---|
-| เย็นวันก่อน 17:30 (อัตโนมัติ) | `00_collect_daily.py` (Task Scheduler) → ร่างรอบเช้า + β ชั้น 2 + `evening_status_<วันที่>.json` | ข้อความแจ้งเตือน 🌙 "สำเร็จ" |
-| เย็นวันก่อน / เช้าก่อนจุดตัด | `python scripts/08_check_ready.py` (ทั้งเครื่องหลักและสำรอง) | ไม่มี FAIL |
+| เย็นวันก่อน 17:30 (อัตโนมัติ, VM) | `00_collect_daily.py` (cron) → ร่างรอบเช้า + β ชั้น 2 + `evening_status_<วันที่>.json` | ข้อความแจ้งเตือน 🌙 "สำเร็จ" |
+| เย็นวันก่อน (ไม่ใช่ 09:10–09:20 / 12:30–12:40: login Settrade ตัด session ของ VM) | `python scripts/08_check_ready.py` (ทั้งเครื่องหลักและสำรอง) | ไม่มี FAIL |
 | จุดตัดเช้า (ดู `sessions.morning.cutoff`) | `python scripts/05_predict_live.py morning` | checklist ด้านล่าง |
 | จุดตัดบ่าย (ดู `sessions.afternoon.cutoff`) | `python scripts/05_predict_live.py afternoon` | checklist ด้านล่าง |
 | หลังส่ง | จดเวลาส่งจริงลง `outputs/logs/submit_times.csv` | |

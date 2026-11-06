@@ -24,13 +24,41 @@ def load_credentials(env_file=ROOT / ".env"):
     return creds
 
 
-def connect():
+def _login():
     from settrade_v2 import Investor
     c = load_credentials()
     investor = Investor(app_id=c["SETTRADE_APP_ID"], app_secret=c["SETTRADE_APP_SECRET"],
                         app_code=c["SETTRADE_APP_CODE"], broker_id=c["SETTRADE_BROKER_ID"],
                         is_auto_queue=False)
     return investor.MarketData()
+
+
+def session_lost(e):
+    """session ถูกตัดเพราะมีการ login ด้วยรหัสเดียวกันจากที่อื่น (VM 2 และ 6 พ.ย.: Status[Kicked], U-102)"""
+    text = str(e)
+    return "Kicked" in text or "U-102" in text or "UserSession" in text
+
+
+class Market:
+    """MarketData ที่ login ใหม่แล้วลองซ้ำ 1 ครั้งเมื่อ session ถูกตัด — error อื่นส่งต่อตามเดิม"""
+
+    def __init__(self, login=_login):
+        self._login = login
+        self._market = login()
+
+    def get_candlestick(self, **kwargs):
+        try:
+            return self._market.get_candlestick(**kwargs)
+        except Exception as e:
+            if not session_lost(e):
+                raise
+            print("Settrade: session ถูกตัด (มีการ login จากที่อื่น) → login ใหม่แล้วลองซ้ำ", flush=True)
+            self._market = self._login()
+            return self._market.get_candlestick(**kwargs)
+
+
+def connect():
+    return Market()
 
 
 def candles_to_frame(res, rules):
@@ -59,8 +87,7 @@ def fetch_day(market, symbol, date, rules, limit=1000):
 def fetch_days(market, symbol, dates, rules, on_day=None):
     """1m ทีละวัน → (frames, วันที่ว่าง, [(วัน, ชนิด error)])
 
-    วันที่เก่าเกินที่ API เก็บไว้ บางครั้ง API ส่งค่าว่าง บางครั้งโยน error (VM 2 พ.ย.: ล้มทั้งขั้นที่ 26 ต.ค.)
-    → error รายวันไม่หยุดวันที่เหลือ · ผู้เรียกตัดสินว่าล้มจริงไหม (failed_days)"""
+    error รายวันไม่หยุดวันที่เหลือ · ผู้เรียกตัดสินว่าล้มจริงไหม (failed_days)"""
     frames, empty, errors = [], 0, []
     for d in dates:
         try:
@@ -78,7 +105,7 @@ def fetch_days(market, symbol, dates, rules, on_day=None):
 
 
 def failed_days(dates, errors):
-    """ล้มจริง = error ที่วันล่าสุดที่ขอ หรือทุกวัน — error เฉพาะวันเก่า (หลุดช่วงที่ API เก็บ) ถือว่าปกติ"""
+    """ล้มจริง = error ที่วันล่าสุดที่ขอ หรือทุกวัน · error เฉพาะวันเก่าไม่กระทบข้อมูลใหม่จึงไม่ถือว่าล้ม"""
     bad = {d for d, _ in errors}
     return bool(errors) and (pd.Timestamp(dates[-1]) in bad or len(bad) == len(dates))
 

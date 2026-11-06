@@ -92,7 +92,7 @@ def main():
             print(f"      ข้อมูลเก่าสุดที่ได้: {new['timestamp'].min()}")
         if errors:
             print("      API error: " + ", ".join(f"{d.date()} ({e})" for d, e in errors)
-                  + (" ← วันล่าสุด/ทุกวัน = ล้ม" if failed_days(dates, errors) else " (วันเก่าเกินที่ API เก็บ — ข้าม)"))
+                  + (" ← วันล่าสุด/ทุกวัน = ล้ม" if failed_days(dates, errors) else " (เฉพาะวันเก่า — ข้าม)"))
         if failed_days(dates, errors):
             failed.append(sym)
     if failed:

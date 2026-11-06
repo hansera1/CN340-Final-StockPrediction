@@ -21,8 +21,8 @@ sessions:
     start_time: "10:00"        # P(10:00)
     end_time: "12:30"          # P(12:30)
   afternoon:
-    submit_deadline: "12:30"   # ยืนยันแล้ว
-    cutoff: "12:15"            # c_บ่าย — ยืนยันจากผลวัดบน VM 2 พ.ย. (ช้าสุดที่ปลอดภัย 12:24 แต่คงค่าที่ทดสอบ walk-forward)
+    submit_deadline: "13:00"   # อาจารย์ยืนยัน 6 พ.ย. (เดิม 12:30)
+    cutoff: "12:35"            # c_บ่าย — หลังตลาดเช้าปิด เลือก 6 พ.ย. ให้เห็นภาคเช้าครบ (walk-forward: results/cutoff_1235/)
     start_time: "14:00"        # P(14:00)
     end_time: "16:30"          # P(16:30)
 
@@ -30,10 +30,10 @@ sessions:
 afternoon_history_start: "2024-03-25"
 
 label:
-  # ราคา 16:30 — ชั่วคราว รอยืนยันกับอาจารย์
+  # ราคา 16:30 — อาจารย์ยืนยัน 6 พ.ย.: ราคาปิดทางการหลัง ATC
   #   last_trade_at_or_before = ราคาซื้อขายล่าสุด ณ/ก่อน 16:30 (สิ้นสุด continuous)
   #   closing_auction         = ราคาปิดประมูล (ATC, แท่งหลัง 16:30)
-  price_1630: last_trade_at_or_before
+  price_1630: closing_auction
   #   closing_auction ใช้ราคาปิดทางการของวันนั้นจาก Settrade 1d (ไฟล์ 60m ไม่มีแท่งประมูลปิด) → cache แยก (_atc)
   #   โมเดลสำรองของนิยามนี้: outputs/models/R4ATC/ (ใช้เฉพาะเมื่ออาจารย์ตอบว่า 16:30 = ATC)
   store_closing_auction: true    # เก็บราคาปิดประมูลเป็นคอลัมน์ p_close_auction ไว้สลับได้โดยไม่ต้องดึงข้อมูลใหม่
@@ -75,7 +75,7 @@ live:
   # E13 ชั้น 2 รอบบ่าย (results/e13_preregistration.md): shadow = ส่ง p₁ บันทึก p_final · live = ส่ง p_final
   #   live ใช้เฉพาะเมื่อผ่านเกณฑ์ E-4 ทุกข้อ (หรือข้อยกเว้นตามคำตอบอาจารย์) · ฝึกตอนเย็นวันก่อน → outputs/models/stage2/<วันที่>.json
   stage2: {enabled: true, mode: shadow, train_days: 20, l2: 45, min_nonflat: 20}
-  model_dir: ""              # "" = outputs/models/<spec> · "R4ATC" = ชุดที่ฝึกด้วย label 16:30 = ATC (ใช้คู่ label.price_1630)
+  model_dir: "R4ATC"         # "" = outputs/models/<spec> · "R4ATC" = ชุดที่ฝึกด้วย label 16:30 = ATC (ใช้คู่ label.price_1630)
   max_price_age_min: 30    # สำหรับรอบบ่าย: ราคา P(c) ต้องไม่เก่ากว่านี้
   # แท่ง 1m ของ "วันนี้" ในวันจริง: ลองตามลำดับ แล้วรวมเป็น data.interval ด้วย aggregate_bars (แบบ yfinance)
   # Settrade = แหล่งหลัก (บัญชีมีสิทธิ์ market data แล้ว) · yfinance = สำรองเท่านั้น (ช้าได้ 15–20 นาที

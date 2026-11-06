@@ -1,4 +1,4 @@
-# Task 9 item 6: register Windows Task Scheduler jobs (same file for the main and the backup machine).
+# Task 9 item 6: register Windows Task Scheduler jobs on the backup laptop (the main machine is the VM: install_cron.sh).
 # Times are read from configs/rules.yaml. ASCII only: Windows PowerShell 5.1 misreads UTF-8 without BOM.
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\setup_tasks.ps1                # evening job + watchdogs
@@ -37,7 +37,8 @@ function Add-Task($name, $time, $scriptArgs, [switch]$CatchUp) {
     "{0,-34} {1}  {2}  ({3})" -f $name, $time, $scriptArgs, $mode
 }
 
-Add-Task "kbank_advanc_collect_daily" "17:30" "00_collect_daily.py" -CatchUp
+# 18:00, not 17:30: a Settrade login here kicks the session of the VM evening job (same credentials)
+Add-Task "kbank_advanc_collect_daily" "18:00" "00_collect_daily.py" -CatchUp
 Add-Task "kbank_advanc_watchdog_morning" $t[2] "10_watchdog.py morning"
 Add-Task "kbank_advanc_watchdog_afternoon" $t[3] "10_watchdog.py afternoon"
 if ($WithPredict) {

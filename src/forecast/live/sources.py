@@ -24,7 +24,10 @@ def today_bars_1m(symbol, rules, date, as_of, source_dirs=None):
         if b.empty:
             skipped.append(f"{src}: ไม่มีแท่งวันนี้")
             continue
-        lag = as_of - b["bar_end"].max()
+        # พักเที่ยงไม่มีการซื้อขาย: นับความเก่าถึงเวลาปิดภาคเช้า ไม่ใช่จุดตัด (จุดตัดบ่ายอยู่หลัง 12:30)
+        am_end, pm_start = session_times(rules, "morning", date)["end"], session_times(rules, "afternoon", date)["start"]
+        ref = am_end if am_end <= as_of < pm_start else as_of
+        lag = max(ref - b["bar_end"].max(), pd.Timedelta(0))
         if lag > max_lag:
             skipped.append(f"{src}: แท่งล่าสุดเก่า {lag.total_seconds() / 60:.0f} นาที")
             continue

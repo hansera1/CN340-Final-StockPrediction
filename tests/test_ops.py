@@ -195,3 +195,69 @@ def test_fetch_days_fails_when_latest_or_all_fail():
     assert failed_days(dates, errors)
     _, _, errors = fetch_days(_FakeMarket("2026-10-01", fail_all=True), "KBANK", dates, rules)
     assert failed_days(dates, errors)
+
+
+def _kicked(*a, **k):
+    raise RuntimeError("Session unavailable. Status[Kicked]")
+
+
+class _Seq:
+    def __init__(self, fn):
+        self.get_candlestick = fn
+
+
+def test_market_relogins_once_when_session_kicked(capsys):
+    from forecast.data.settrade import Market
+    logins = iter([_Seq(_kicked), _Seq(lambda **k: {"ok": k["symbol"]})])
+    n = []
+    m = Market(login=lambda: (n.append(1), next(logins))[1])
+    assert m.get_candlestick(symbol="KBANK") == {"ok": "KBANK"}
+    assert len(n) == 2 and "login ใหม่" in capsys.readouterr().out
+
+
+def test_market_gives_up_after_one_retry_and_passes_other_errors():
+    from forecast.data.settrade import Market
+    m = Market(login=lambda: _Seq(_kicked))
+    with pytest.raises(RuntimeError, match="Kicked"):
+        m.get_candlestick(symbol="KBANK")
+
+    def other(**k):
+        raise ValueError("bad symbol")
+    n = []
+    m = Market(login=lambda: (n.append(1), _Seq(other))[1])
+    with pytest.raises(ValueError):
+        m.get_candlestick(symbol="X")
+    assert len(n) == 1                                    # error อื่นไม่ login ซ้ำ
+
+
+def _one_min(tmp_path, last):
+    (tmp_path / "settrade").mkdir()
+    t = pd.date_range("2026-11-09 10:00", last, freq="1min")
+    pd.DataFrame({"timestamp": t, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 100}).to_csv(
+        tmp_path / "settrade" / "KBANK_1m.csv", index=False)
+    return {"settrade": tmp_path / "settrade", "yfinance": tmp_path / "none"}
+
+
+@pytest.mark.parametrize("last, now, used", [
+    ("2026-11-09 12:26", "12:35", True),    # แท่งสุดท้ายจบ 12:27 ไม่มีการซื้อขายต่อ: หลังตลาดปิดนับถึง 12:30 → 3 นาที ใช้ได้
+    ("2026-11-09 12:20", "12:35", False),   # จบ 12:21 → เก่า 9 นาทีเมื่อเทียบ 12:30 → ข้าม
+    ("2026-11-09 12:04", "12:15", False),   # ก่อนตลาดปิดยังนับถึงจุดตัด: จบ 12:05 → เก่า 10 นาที → ข้าม
+])
+def test_bar_lag_counts_to_morning_close_during_lunch(tmp_path, last, now, used):
+    from forecast.live.sources import today_bars_1m
+    rules = load_rules()
+    tz = rules["timezone"]
+    b, src, lag, _ = today_bars_1m("KBANK", rules, pd.Timestamp("2026-11-09", tz=tz),
+                                   pd.Timestamp(f"2026-11-09 {now}", tz=tz), _one_min(tmp_path, last))
+    assert (src == "settrade") is used
+    if used:
+        assert lag == 180
+
+
+def test_rules_match_teacher_answers():
+    """6 พ.ย.: บ่ายส่งก่อน 13:00, ราคาปิดบ่าย = ราคาปิดทางการหลัง ATC, จุดตัด 12:35 อยู่หลังตลาดเช้าปิดและก่อนเส้นตาย"""
+    r = load_rules()
+    pm = r["sessions"]["afternoon"]
+    assert pm["submit_deadline"] == "13:00" and "12:30" < pm["cutoff"] < pm["submit_deadline"]
+    assert r["label"]["price_1630"] == "closing_auction" and r["live"]["model_dir"] == "R4ATC"
+    assert r["sessions"]["morning"]["submit_deadline"] == "09:30"

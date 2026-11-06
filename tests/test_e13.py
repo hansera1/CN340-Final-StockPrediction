@@ -115,7 +115,10 @@ def test_p1_out_of_sample():
     from forecast.evaluation.runner import load_or_build_dataset
     from forecast.evaluation.splits import holdout_split, walk_forward_splits
     ev = RULES["evaluation"]
-    ds = load_or_build_dataset({**RULES, "label": {**RULES["label"], "p_ref_morning": "last_bar_close"}})
+    # dataset ของ walk-forward รอบที่ 3: label จากแท่ง + จุดตัด 12:15 (ตรงกับไฟล์ predictions ของ E12)
+    sess = {**RULES["sessions"], "afternoon": {**RULES["sessions"]["afternoon"], "cutoff": "12:15"}}
+    label = {**RULES["label"], "p_ref_morning": "last_bar_close", "price_1630": "last_trade_at_or_before"}
+    ds = load_or_build_dataset({**RULES, "label": label, "sessions": sess})
     pm = ds[ds["session"] == "afternoon"]
     dates = pm["date"].to_numpy()
     tz = RULES["timezone"]
