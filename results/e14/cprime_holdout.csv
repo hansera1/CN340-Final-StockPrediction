@@ -1,0 +1,5 @@
+﻿model,session,n,acc,ll
+p_pre,morning,20,0.6,0.6809406747206677
+p_pre,afternoon,20,0.6,0.7198421251882412
+p_cprime,morning,20,0.6,0.6809406747206677
+p_cprime,afternoon,20,0.6,0.7168749227891922
