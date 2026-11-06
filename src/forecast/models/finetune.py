@@ -23,7 +23,7 @@ from torch.nn import functional as F
 
 from forecast.models.cnn1d import train_device
 from forecast.models.common import as_frame
-from forecast.models.e9 import ConformalPrice, last_days_split, updown
+from forecast.models.e9 import ConformalPrice, last_days_split, target_rows
 
 CURVES = []
 MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
@@ -125,7 +125,8 @@ class FineTuneModel:
 
     def __init__(self, quantiles, arch="resnet18", stage="s2", seeds=(0, 1, 2), epochs=30, patience=5,
                  batch_size=64, lr_head=1e-3, lr_block=1e-4, layer_decay=0.3, weight_decay=0.05, warmup=2,
-                 smoothing=0.1, val_frac=0.2, C=0.01, gpu_cache_bytes=2_500_000_000, accum_steps=1):
+                 smoothing=0.1, val_frac=0.2, C=0.01, gpu_cache_bytes=2_500_000_000, accum_steps=1, target="updown"):
+        self.target = target
         self.quantiles, self.arch, self.stage, self.seeds = quantiles, arch, stage, seeds
         self.epochs, self.patience, self.bs = epochs, patience, batch_size
         self.lr_head, self.lr_block, self.layer_decay = lr_head, lr_block, layer_decay
@@ -224,7 +225,7 @@ class FineTuneModel:
     def fit(self, X, up, z, meta, imgs):
         t0 = time.perf_counter()
         self.price_ = ConformalPrice(self.quantiles).fit(meta)
-        m, y = updown(meta)
+        m, y = target_rows(meta, self.target)
         dates = meta["date"].to_numpy()[m]
         x = torch.from_numpy(np.ascontiguousarray(imgs[m]))
         y = torch.tensor(y, dtype=torch.float32)

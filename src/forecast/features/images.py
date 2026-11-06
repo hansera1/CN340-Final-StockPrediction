@@ -35,10 +35,10 @@ def _series(w):
     return np.stack([r, np.abs(r), v])
 
 
-def morlet_cwt(x, n_scales=32, w0=6.0):
+def morlet_cwt(x, n_scales=32, w0=6.0, s_min=1.0):
     """|CWT| ด้วย Morlet (คำนวณเอง — scipy.signal.cwt ถูกถอดออกแล้ว) → (n_scales, len(x))"""
     n = len(x)
-    scales = np.geomspace(1, max(2, n / 2), n_scales)
+    scales = np.geomspace(s_min, max(2, n / 2), n_scales)
     out = np.empty((n_scales, n))
     for k, s in enumerate(scales):
         half = min(int(4 * s), (n - 1) // 2)          # kernel ไม่ยาวกว่าสัญญาณ → ผลยาว n เท่าเดิม
