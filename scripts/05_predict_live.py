@@ -1,4 +1,4 @@
-"""ส่งจริง: รันที่ c_เช้า / c_บ่าย แล้วส่งผลก่อน 09:30 / 12:30
+"""ส่งจริง: รันที่ c_เช้า / c_บ่าย แล้วส่งผลก่อน 09:00 / 13:00
 
     python scripts/05_predict_live.py morning
     python scripts/05_predict_live.py afternoon

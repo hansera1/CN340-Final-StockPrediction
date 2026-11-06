@@ -126,7 +126,7 @@ def test_notify_unreachable_channel_returns_error_type(tmp_path):
 # ---------- ข้อ 5: ตรวจความพร้อม
 def test_targets():
     assert RD.targets(RULES, "2026-11-08 20:00") == (pd.Timestamp("2026-11-09"), pd.Timestamp("2026-11-09"))
-    assert RD.targets(RULES, "2026-11-09 09:00") == (pd.Timestamp("2026-11-09"), pd.Timestamp("2026-11-09"))
+    assert RD.targets(RULES, "2026-11-09 08:59") == (pd.Timestamp("2026-11-09"), pd.Timestamp("2026-11-09"))
     assert RD.targets(RULES, "2026-11-09 10:00") == (pd.Timestamp("2026-11-10"), pd.Timestamp("2026-11-09"))
     assert RD.targets(RULES, "2026-11-13 18:00") == (pd.Timestamp("2026-11-16"), pd.Timestamp("2026-11-16"))
 
@@ -260,4 +260,4 @@ def test_rules_match_teacher_answers():
     pm = r["sessions"]["afternoon"]
     assert pm["submit_deadline"] == "13:00" and "12:30" < pm["cutoff"] < pm["submit_deadline"]
     assert r["label"]["price_1630"] == "closing_auction" and r["live"]["model_dir"] == "R4ATC"
-    assert r["sessions"]["morning"]["submit_deadline"] == "09:30"
+    assert r["sessions"]["morning"]["submit_deadline"] == "09:00" and r["sessions"]["morning"]["cutoff"] == "08:30"

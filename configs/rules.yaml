@@ -16,8 +16,8 @@ bar_timestamp: start         # ยืนยันจากข้อมูลจ�
 
 sessions:
   morning:
-    submit_deadline: "09:30"   # ยืนยันแล้ว
-    cutoff: "09:15"            # c_เช้า — ยืนยันจากผลวัดบน VM 2 พ.ย. (results/latency_2026-11-02.md)
+    submit_deadline: "09:00"   # รอบ 7 (เดิม 09:30)
+    cutoff: "08:30"            # c_เช้า — รอบ 7 · dataset เท่าเดิมทุกค่าเมื่อเทียบ 09:15 (experiments/29_morning_cutoff_0830.py)
     start_time: "10:00"        # P(10:00)
     end_time: "12:30"          # P(12:30)
   afternoon:
