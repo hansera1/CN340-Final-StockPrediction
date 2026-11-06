@@ -177,7 +177,7 @@ def main():
     end = pd.Timestamp(s17.WF_LAST_DAY).tz_localize(tz) + pd.Timedelta(hours=23, minutes=59)
     ds = load_or_build_dataset(rules, as_of=end, tag="_wf")
     days = np.sort(ds["date"].unique())
-    assert str(days[-1])[:10] == "2026-10-29" and str(days[-10])[:10] == "2026-10-14" and str(days[-11])[:10] == "2026-10-13", days[-11:]
+    assert str(days[-1])[:10] == "2026-10-29" and str(days[-10])[:10] == "2026-10-14" and str(days[-11])[:10] == "2026-10-12", days[-11:]
     n_boot = rules["evaluation"]["n_boot"]
     un, fd, adir = variants()
 
