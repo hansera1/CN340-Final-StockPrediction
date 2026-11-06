@@ -2,6 +2,7 @@
 
     python experiments/28_e19_train.py               # ขั้นต่ำฝึก 20 วัน · วันทดสอบ < 5 → รายงานว่าวัดผลไม่ได้
     python experiments/28_e19_train.py --smoke 8     # ตรวจ pipeline เท่านั้น: ฝึกขั้นต่ำ 8 วัน, 2 epoch, 1 seed · ห้ามอ้างเป็นผล
+    python experiments/28_e19_train.py --explore 8   # รันสำรวจ: ฝึกขั้นต่ำ 8 วัน สเปกเต็ม · ไม่ผ่านเกณฑ์ที่ลงทะเบียน ไม่ใช้ตัดสิน
 → outputs/experiments/E19[_smoke]/predictions.csv, curves.csv, metrics.csv
 """
 import argparse
@@ -106,12 +107,40 @@ def oof_days(dates, tr, n=4):
     return [np.isin(dates, part) & tr for part in np.array_split(ud, min(n, len(ud)))]
 
 
+def day_ci(v, dates, n=2000, seed=0):
+    """ผลต่างเฉลี่ย + CI 95% จาก bootstrap รายวัน"""
+    s = pd.DataFrame({"v": v, "d": dates}).groupby("d")["v"].agg(["sum", "count"])
+    idx = np.random.default_rng(seed).integers(0, len(s), (n, len(s)))
+    b = s["sum"].to_numpy()[idx].sum(1) / s["count"].to_numpy()[idx].sum(1)
+    return s["sum"].sum() / s["count"].sum(), np.quantile(b, .025), np.quantile(b, .975)
+
+
+def explore_ci(r):
+    """เทียบ E0-un และ A-un บนแถวเดียวกัน → ตารางรายแบบ"""
+    y = (r["direction"] == 1).to_numpy(float)
+    ll = lambda p: -(y * np.log(np.clip(p, 1e-6, 1)) + (1 - y) * np.log(np.clip(1 - p, 1e-6, 1)))
+    ok = lambda p: ((p > .5) == (y == 1)).astype(float)
+    out = {}
+    for (arch, kind), idx in r.groupby(["arch", "kind"]).groups.items():
+        m = r.index.isin(idx)
+        row = {}
+        p = r["p_up"].to_numpy()
+        for name, c in [("e0", "p_e0"), ("a_un", "p_a_un")]:
+            q = r[c].to_numpy(float)
+            row[f"acc_{name}"] = ok(q)[m].mean()
+            row[f"d_acc_{name}"], row[f"d_acc_{name}_lo"], row[f"d_acc_{name}_hi"] = day_ci((ok(p) - ok(q))[m], r["date"].to_numpy()[m])
+            row[f"d_ll_{name}"], row[f"d_ll_{name}_lo"], row[f"d_ll_{name}_hi"] = day_ci((ll(p) - ll(q))[m], r["date"].to_numpy()[m])
+        out[(arch, kind)] = row
+    return pd.DataFrame(out).T.rename_axis(["arch", "kind"])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", type=int, help="ฝึกขั้นต่ำ n วัน เพื่อตรวจ pipeline เท่านั้น")
+    ap.add_argument("--explore", type=int, help="ฝึกขั้นต่ำ n วัน สเปกเต็ม — รันสำรวจ ไม่ผ่านเกณฑ์ที่ลงทะเบียน")
     args = ap.parse_args()
-    smoke = args.smoke is not None
-    min_train, epochs, seeds = (args.smoke, 2, (0,)) if smoke else (MIN_TRAIN, 30, (0, 1, 2))
+    smoke, explore = args.smoke is not None, args.explore is not None
+    min_train, epochs, seeds = (args.smoke, 2, (0,)) if smoke else (args.explore if explore else MIN_TRAIN, 30, (0, 1, 2))
     torch.backends.cudnn.deterministic = True
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rules = load_rules()
@@ -133,10 +162,11 @@ def main():
     test_days = ud[min_train:]
     msg = f"{len(g)} ตัวอย่าง · {len(ud)} วัน · ขั้นต่ำฝึก {min_train} · วันทดสอบ {len(test_days)}"
     print(msg, flush=True)
-    if not smoke and len(test_days) < MIN_TEST:
+    if not smoke and not explore and len(test_days) < MIN_TEST:
         print(f"วัดผลไม่ได้: วันทดสอบ {len(test_days)} < {MIN_TEST} · ต้องมีอย่างน้อย {MIN_TRAIN + MIN_TEST} วัน")
         return
-    out = OUTPUT_DIR / "experiments" / ("E19_smoke" if smoke else "E19")
+    out = OUTPUT_DIR / "experiments" / ("E19_smoke" if smoke else "E19_explore" if explore else "E19")
+    hist = pm[pm["direction"].notna()]
     out.mkdir(parents=True, exist_ok=True)
     kinds = ["S0-pca3", "S0-pca5", "S0-LR", "S1", "S2"]
     rows, times = [], []
@@ -155,7 +185,8 @@ def main():
                 ok = tr & np.isfinite(oof)
                 zhat = LinearRegression().fit(oof[ok, None], g["z"].to_numpy()[ok]).predict(p[:, None])
                 price = g["p_ref"].to_numpy()[te] * np.exp(zhat)
-                rows.append(g.loc[te, ["date", "symbol", "direction", "p_ref", "p_end"]].assign(arch=arch, kind=kind, p_up=p, price=price))
+                e0 = [(hist[(hist["date"].to_numpy() < day) & (hist["symbol"] == s)]["direction"] == 1).mean() for s in g.loc[te, "symbol"]]
+                rows.append(g.loc[te, ["date", "symbol", "direction", "p_ref", "p_end"]].assign(arch=arch, kind=kind, p_up=p, price=price, p_a_un=p1[te], p_e0=e0))
             times.append({"arch": arch, "kind": kind, "sec": time.perf_counter() - t0})
             print(arch, kind, f"{times[-1]['sec']:.0f} วิ", flush=True)
     r = pd.concat(rows, ignore_index=True)
@@ -171,6 +202,10 @@ def main():
     t.to_csv(out / "metrics.csv", index=False, encoding="utf-8-sig")
     if smoke:
         print("** SMOKE: ตรวจ pipeline เท่านั้น ห้ามอ้างเป็นผล **")
+    elif explore:
+        t = t.join(explore_ci(r), on=["arch", "kind"])
+        t.to_csv(ROOT / "results" / "e19" / "explore_metrics.csv", index=False, encoding="utf-8-sig")
+        print("** EXPLORE: ข้อมูลน้อยเกินสรุป ไม่ผ่านเกณฑ์ที่ลงทะเบียน ไม่ใช้ตัดสิน **")
     else:
         t.to_csv(ROOT / "results" / "e19" / "metrics.csv", index=False, encoding="utf-8-sig")
     pd.set_option("display.width", 200)
