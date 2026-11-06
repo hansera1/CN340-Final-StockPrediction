@@ -44,7 +44,7 @@ from forecast.live.daily_check import (build_fallback_root, is_trading_day, miss
 from forecast.live.evening import needs_rerun
 from forecast.live.log_schema import PredictionLog, append_log, read_logs
 from forecast.live.notify import notify
-from forecast.live.predict import predict_session
+from forecast.live.predict import predict_session, predict_shadow_slots
 
 SESSION_TH = {"morning": "เช้า", "afternoon": "บ่าย"}
 
@@ -290,7 +290,7 @@ def main():
         rows.append({name: COLUMNS[key](r, p) for name, key in sub["columns"].items()})
         detail.append({
             "วันที่": r.date, "รอบ": SESSION_TH[r.session], "หุ้น": r.symbol,
-            "ทิศทาง": r.direction, "P(ขึ้น)": round(r.p_up, 3),
+            "ทิศทาง": r.direction, "P(ขึ้น)": round(r.p_up, 3), "เป้าหมายทิศทาง": r.direction_target,
             "ราคาคาด": p["q50"], "ช่วง 50%": f"{p['q25']:.2f}–{p['q75']:.2f}",
             "ช่วง 80%": f"{p['q10']:.2f}–{p['q90']:.2f}",
             "ราคาอ้างอิง P(c)": r.reference_price, "ที่มา P(c)": r.reference_source,
@@ -340,10 +340,19 @@ def main():
         body = [" · ".join(f"{c} {v:.2f}" if isinstance(v, float) and c != "P(ขึ้น)" else f"{c} {v}"
                            for c, v in row.items() if c not in ("วันที่", "รอบ")) for row in rows]
         missing = [s for s in rules["symbols"] if s not in {r.symbol for r in records}]
+        tgt = records[0].direction_target if records else "up_down"
+        note = f"เป้าหมายทิศทาง {tgt}" + (" (P(ขึ้น) = P(ขึ้น) บนทุกวัน ไม่ใช่ P(ขึ้น | ไม่นิ่ง))" if tgt == "up_notup" else "")
         notify("ready", head + (f" — ⚠ ไม่ครบ: ขาด {', '.join(missing)}" if missing else ""),
-               body + [f"ไฟล์ {name} · เครื่อง {_setup.RUN['host']}" + (" · มี fallback (ดูข้อความถัดไป)" if fb else "")])
+               body + [note, f"ไฟล์ {name} · เครื่อง {_setup.RUN['host']}" + (" · มี fallback (ดูข้อความถัดไป)" if fb else "")])
         if fb:
             notify("fallback", f"{args.date} {SESSION_TH[args.session]}: ใช้ทางสำรอง — ตรวจก่อนส่ง", fb)
+    try:   # รอบ 7: แบบที่รันเงา — หลังไฟล์ส่งและข้อความแจ้งเสร็จแล้ว ใช้แท่งที่มีอยู่ ไม่ดึงใหม่ ล้มได้ไม่กระทบ
+        slot_logs = predict_shadow_slots(args.session, date, rules, now=args.now, data_root=data_root)
+        for sh in slot_logs:
+            append_log(logdir / "shadow_log.jsonl", sh)
+        shadows = list(shadows) + slot_logs
+    except Exception as e:
+        print(f"รันเงาช่องโมเดลล้ม ({type(e).__name__}: {str(e)[:120]}) — ไม่กระทบไฟล์ส่ง")
     print(f"รันเงา {len(shadows)} รายการ → {logdir / 'shadow_log.jsonl'} (ไม่ส่ง)")
 
 

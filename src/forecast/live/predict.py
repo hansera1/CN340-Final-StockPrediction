@@ -1,6 +1,6 @@
 """ทำนายหนึ่งรอบของวันจริง — เฉพาะโมเดลที่ล็อก (NEXT_STEPS รอบที่ 3 ข้อ 3, 7)
 
-ทิศทาง  E12 fd_lr = F0 + F-daily, LR สเปก E9-LR (rules.yaml → live.direction; results/lock_decision.md)
+ทิศทาง  E12 fd_lr = F0 + F-daily, LR สเปก E9-LR (rules.yaml → live.models; live/slots.py; results/lock_decision.md)
 ราคา    กฎค่ามัธยฐาน: A-price LR ทาย P(ราคาปลาย = P(c)), p_price ทาย P(ราคาปลาย > P(c) | ไม่เท่า)
         P(สูงกว่า) = (1 − P(เท่า)) × p_price → ราคาจุด = P(c) + 1 ช่องถ้า > 0.5, − 1 ช่องถ้า P(ต่ำกว่า) > 0.5, นอกนั้น P(c)
         ช่วงราคา = quantile เชิงประจักษ์ของ z (E0) รอบราคาจุด
@@ -19,6 +19,7 @@ P(c)    รอบบ่าย = ราคาซื้อขายล่าสุ
    และ extra_reasons = ขั้นที่ใช้ → ต่อท้าย fallback_reason
 6. live.price_consistency (ปิดไว้): ราคาจุดตามทิศของโมเดลทิศทางเมื่อมั่นใจพอ (ข้อ 1ง) — ใช้ทิศทางที่ส่งจริง
 7. E13 ชั้น 2 รอบบ่าย (live.stage2, live/stage2_live.py): β ฝึกตอนเย็นวันก่อน · shadow = ส่ง p₁ บันทึก p_final
+8. รอบ 7: ช่องโมเดลแยกรอบ + direction_target · bundle kind = "sklearn" = pipeline ใด ๆ · predict_shadow_slots รันเงาหลังได้ไฟล์ส่ง
 """
 import pickle
 import traceback
@@ -36,6 +37,7 @@ from forecast.evaluation.runner import design_matrix
 from forecast.features.dataset import assemble_dataset
 from forecast.labels.make_labels import labels_for
 from forecast.live.log_schema import PredictionLog, ShadowLog
+from forecast.live.slots import decide, direction_spec, direction_target, price_specs, support_spec
 from forecast.live.sources import live_bars
 from forecast.live.stage2_live import apply as stage2_apply
 from forecast.models.baseline import BaselineModel
@@ -69,6 +71,8 @@ def predict_row(bundle, sym, session, ds, date):
         X = design_matrix(row, [c for c in bundle["feature_cols"] if c in row], bundle["group_by"])
         X = X.reindex(columns=bundle["feature_cols"])
     X[[c for c in X if c.startswith(("f_sym_", "f_sess_"))]] = X.filter(regex="^f_(sym|sess)_").fillna(0.0)
+    if bundle.get("kind") == "sklearn":   # รอบ 7 ข้อ 4.5.1: pipeline scikit-learn ใด ๆ ต่อช่อง
+        return pd.Series({"p_up": float(bundle["model"].predict_proba(X)[0, 1])})
     return bundle["model"].predict(X, row).iloc[0]
 
 
@@ -192,9 +196,9 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
     data_root: โฟลเดอร์แทน data/raw (มี settrade/, yfinance/) — ใช้กับสำเนาข้อมูลสำรองและการซ้อม
     extra_reasons: {หุ้น: [ข้อความ]} ต่อท้าย fallback_reason (ขั้น fallback ของข้อมูลรายวัน)"""
     live = dict(rules["live"])
-    if live.get("model_dir"):   # ชุดโมเดลสำรอง เช่น R4ATC (label 16:30 = ATC)
-        for k in ["direction", "price_eq", "price_up", "shadow", "flat_dir"]:
-            live[k] = f"{live['model_dir']}/{live[k]}"
+    live["shadow"], live["flat_dir"] = support_spec(rules, "shadow"), support_spec(rules, "flat_dir")
+    dir_spec, target = direction_spec(rules, session), direction_target(rules, session)
+    eq_spec, up_spec = price_specs(rules, session)
     if data_root is not None:
         raw_dir = data_root / rules["data"]["source"]
         source_dirs = {s: data_root / s for s in live["sources"]}
@@ -255,7 +259,7 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
         # ทิศทาง: โมเดลที่ล็อก (ขั้น 1–3) → ขั้น 4 E0-ud เฉพาะเมื่อโหลดไฟล์โมเดลไม่ได้
         version, fver = "baseline E0-ud (fallback)", "n/a"
         try:
-            pred, bundle, step, notes = ml_predict(live["direction"], sym, session, date, get_ds, "ทิศทาง")
+            pred, bundle, step, notes = ml_predict(dir_spec, sym, session, date, get_ds, "ทิศทาง")
             version, fver = bundle["model_version"], f"trained_until={bundle['trained_until']}"
         except Exception:
             pred, step, notes = _baseline(bars, rules, session, date), 4, [_err("ทิศทาง โหลดโมเดลไม่ได้")]
@@ -279,7 +283,7 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
                 p_up = p_final
                 if s2_reason:
                     reasons.append(f"ชั้น 2: {s2_reason} → p_final = p₁")
-        direction = "ขึ้น" if p_up >= 0.5 else "ลง"
+        direction = decide(p_up, target)
         if (live.get("three_way") or {}).get("enabled") and step < 4:
             try:   # ข้อ 1ข: กฎ 3 คำตอบ
                 f = float(predict_row(load_bundle(live["flat_dir"], sym, session), sym, session, ds, date)["p_up"])
@@ -291,8 +295,8 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
         p_eq = p_price = p_hi = p_lo = None
         point = p_ref
         try:
-            e, _, se, ne = ml_predict(live["price_eq"], sym, session, date, get_ds, "P(เท่า)")
-            u, _, su, nu = ml_predict(live["price_up"], sym, session, date, get_ds, "p_price")
+            e, _, se, ne = ml_predict(eq_spec, sym, session, date, get_ds, "P(เท่า)")
+            u, _, su, nu = ml_predict(up_spec, sym, session, date, get_ds, "p_price")
             p_eq, p_price = float(e["p_up"]), float(u["p_up"])
             point, p_hi, p_lo = median_rule(p_ref, p_eq, p_price)
             if max(se, su) > 1:
@@ -332,6 +336,7 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
             fallback_reason="; ".join(dict.fromkeys(reasons)) or None,
             p_stage1=p_stage1, p_final=p_final, stage2_betas=s2_betas, stage2_reason=s2_reason,
             data_source=meta["source"], data_lag_sec=meta["lag_sec"], data_age_min=data_age_min,
+            direction_target=target,
         ))
 
         # รันเงา: E0-ud + ราคาล่าสุด ณ จุดตัด — ล้มได้โดยไม่กระทบระบบหลัก
@@ -347,3 +352,45 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
         except Exception:
             pass
     return records, shadows
+
+
+def predict_shadow_slots(session, date, rules, now=None, data_root=None):
+    """รอบ 7: แบบที่รันเงา (live.shadow_slots) จากแท่งที่อยู่ในไฟล์แล้ว — ไม่ดึงข้อมูล ไม่ login ไม่เขียนไฟล์
+    → list ของ ShadowLog · ผู้เรียกเขียนลง shadow_log.jsonl หลังไฟล์ส่งถูกสร้างแล้ว แบบที่ล้มถูกข้าม"""
+    slots = [x for x in (rules["live"].get("shadow_slots") or []) if x["slot"].startswith(session)]
+    if not slots:
+        return []
+    raw_dir, source_dirs, daily_dir = None, None, None
+    if data_root is not None:
+        raw_dir = data_root / rules["data"]["source"]
+        source_dirs = {s: data_root / s for s in rules["live"]["sources"]}
+        daily_dir = data_root
+    date = to_local(date, rules).normalize()
+    t = session_times(rules, session, date)
+    as_of = min(t["cutoff"], to_local(now or datetime.now(), rules))
+    by_sym, metas = {}, {}
+    for sym in rules["symbols"]:
+        b, metas[sym] = live_bars(sym, rules, date, as_of, raw_dir, source_dirs)
+        by_sym[sym] = b[b["bar_end"] <= as_of].reset_index(drop=True)
+    ds = assemble_dataset(rules, bars_by_symbol=by_sym, as_of=as_of, live_row=(date, session), daily_dir=daily_dir)
+    out = []
+    for x in slots:
+        for sym in rules["symbols"]:
+            try:
+                p_ref = reference_price(sym, session, date, as_of, by_sym[sym], metas[sym], rules, daily_dir)[0]
+                base = {"symbol": sym, "session": session, "date": str(date.date()), "data_cutoff": str(as_of),
+                        "generated_at": str(datetime.now()), "reference_price": p_ref, "slot": x["slot"]}
+                if x["slot"].endswith("_dir"):
+                    p, b = predict_bundle(x["spec"], sym, session, ds, date)
+                    tgt = x.get("target", "up_down")
+                    out.append(ShadowLog(**base, model=x["spec"], p_up=float(p["p_up"]), direction=decide(float(p["p_up"]), tgt),
+                                         point_price=p_ref, direction_target=tgt, model_version=b["model_version"]))
+                else:
+                    e, b = predict_bundle(x["eq"], sym, session, ds, date)
+                    u, _ = predict_bundle(x["up"], sym, session, ds, date)
+                    point = median_rule(p_ref, float(e["p_up"]), float(u["p_up"]))[0]
+                    out.append(ShadowLog(**base, model=f"{x['eq']} + {x['up']}", p_up=float(u["p_up"]), direction="",
+                                         point_price=point, model_version=b["model_version"]))
+            except Exception:
+                print(_err(f"รันเงา {x['slot']} {sym}"))
+    return out

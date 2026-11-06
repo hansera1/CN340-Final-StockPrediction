@@ -136,7 +136,7 @@ def test_check_ready_flags_missing_models(monkeypatch, tmp_path):
     monkeypatch.setattr(RD, "OUTPUT_DIR", tmp_path)
     t, _, _ = RD.run_checks(RULES, now="2026-11-01 18:00", settrade=False)
     models = t[t["check"].str.startswith("โมเดล")]
-    assert len(models) == 5 and (models["status"] == "FAIL").all()
+    assert len(models) == 8 and (models["status"] == "FAIL").all()
     assert set(t["check"]) >= {"เขตเวลา", "นาฬิกา", ".env Settrade", ".env แจ้งเตือน Telegram"}
     assert t.loc[t["check"] == "นาฬิกา", "status"].iat[0] == "PASS"
     assert "SECRET" not in t.to_string()

@@ -36,6 +36,7 @@ class PredictionLog:
     p_final: float | None = None         # E13: หลังชั้น 2 (= p_stage1 ถ้าชั้น 2 ใช้ไม่ได้)
     stage2_betas: dict | None = None
     stage2_reason: str | None = None     # ว่าง = ชั้น 2 ทำงาน · ไม่ว่าง = เหตุผลที่ p_final = p_stage1
+    direction_target: str = "up_down"    # up_down: P(ขึ้น) = P(ขึ้น | ไม่นิ่ง) · up_notup: P(ขึ้น) บนทุกวัน
 
 
 @dataclass
@@ -52,6 +53,9 @@ class ShadowLog:
     reference_price: float
     point_price: float
     price_quantiles: dict = field(default_factory=dict)
+    slot: str | None = None              # รอบ 7: ช่องของแบบที่รันเงา (ว่าง = E0-ud เดิม)
+    direction_target: str | None = None
+    model_version: str | None = None
 
 
 def append_log(path, record):

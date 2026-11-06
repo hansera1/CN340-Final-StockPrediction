@@ -12,9 +12,8 @@ from forecast.data.settrade import ENV_KEYS
 from forecast.live.daily_check import missing_daily, next_trading_day, prev_trading_day, is_trading_day
 from forecast.live.evening import draft_info, stage2_info
 from forecast.live.notify import KEYS as NOTIFY_KEYS
+from forecast.live.slots import live_specs
 from forecast.runtime import MAX_SKEW_SEC, check_timezone, clock_skew, read_env
-
-LIVE_KEYS = ["direction", "price_eq", "price_up", "shadow", "flat_dir"]
 
 
 def targets(rules, now=None):
@@ -45,11 +44,8 @@ def check_env():
 
 
 def check_models(rules):
-    live = rules["live"]
-    prefix = f"{live['model_dir']}/" if live.get("model_dir") else ""
     out = []
-    for k in LIVE_KEYS:
-        spec = prefix + live[k]
+    for k, spec in live_specs(rules).items():
         trained, bad = set(), []
         for sym in rules["symbols"]:
             for sess in rules["sessions"]:
