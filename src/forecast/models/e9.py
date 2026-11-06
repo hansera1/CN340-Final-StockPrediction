@@ -35,11 +35,16 @@ def same_as_ref(meta):
 def target_rows(meta, target):
     """แถวที่ใช้ฝึก + label 0/1 ตามเป้าหมาย
     updown       ขึ้น vs ลง บนวันไม่ flat (E9)
+    up_notup     ขึ้น (ราคาปลาย > ราคาต้นอย่างน้อย 1 ช่อง) vs ไม่ขึ้น (ลง + เท่าเดิม) — ทุกวัน (รอบ 7, E16)
     flat_dir     ราคาปลาย = ราคาต้นช่วง (E9-FLAT A-dir) — ทุกวัน
     flat_price   ราคาปลาย = P(c) (E9-FLAT A-price) — ทุกวัน
     price_updown ราคาปลาย > P(c) บนวันที่ราคาปลาย ≠ P(c) (E9-FLAT p_price)"""
     if target == "updown":
         return updown(meta)
+    if target == "up_notup":
+        d = meta["direction"].to_numpy(float)
+        m = np.isfinite(d)
+        return m, (d[m] == 1).astype(int)
     if target == "flat_dir":
         d = meta["direction"].to_numpy(float)
         m = np.isfinite(d)

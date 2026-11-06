@@ -46,6 +46,12 @@ def row_losses(df, quantiles):
     yud = (d == 1).astype(float)
     out["logloss_ud"] = np.where(nf, -(yud * np.log(p) + (1 - yud) * np.log(1 - p)), np.nan)
     out["brier"] = (p - y) ** 2
+    # รอบ 7: เป้าหมายขึ้น/ไม่ขึ้น บนทุกวัน — วันนิ่ง = ไม่ขึ้น: ทาย "ลง" แล้วนิ่ง = ถูก, ทาย "ขึ้น" แล้วนิ่ง = ผิด · ทาย "ขึ้น" เมื่อ P > 0.5
+    known = np.isfinite(d)
+    yun = (d == 1).astype(float)
+    out["correct_un"] = np.where(known, ((p > 0.5) == (yun == 1)).astype(float), np.nan)
+    out["logloss_un"] = np.where(known, -(yun * np.log(p) + (1 - yun) * np.log(1 - p)), np.nan)
+    out["brier_un"] = np.where(known, (p - yun) ** 2, np.nan)
     out["abs_err_baht"] = (df["p_end"] - pred_price).abs()
     out["abs_err_ticks"] = out["abs_err_baht"] / tick_size(df["p_ref"])
     out["abs_err_naive_baht"] = (df["p_end"] - df["p_ref"]).abs()
@@ -84,7 +90,11 @@ def summarize(df, quantiles, by=("symbol", "session")):
             "logloss": l["logloss"].mean(),
             "logloss_ud": l["logloss_ud"].mean(),
             "brier": l["brier"].mean(),
+            "acc_up_notup": l["correct_un"].mean(),
+            "logloss_un": l["logloss_un"].mean(),
+            "brier_un": l["brier_un"].mean(),
             "mae_baht": l["abs_err_baht"].mean(),
+            "rmse_baht": np.sqrt((l["abs_err_baht"] ** 2).mean()),
             "mae_ticks": l["abs_err_ticks"].mean(),
             "mae_naive_baht": l["abs_err_naive_baht"].mean(),
             "coverage50": l["cov50"].mean(),
