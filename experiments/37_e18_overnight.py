@@ -1,7 +1,7 @@
 """E18: H1 ตัวตรวจระบบ → H2 ราคาเช้า → H3 ทิศทางเช้า — เกณฑ์ใน results/e18_preregistration.md · ไม่แตะระบบ live
 
     python experiments/37_e18_overnight.py h1     # ตรวจระบบก่อน ไม่ผ่านห้ามไปต่อ
-    python experiments/37_e18_overnight.py full   # H2 + H3
+    python experiments/37_e18_overnight.py full [--bug-check-done]   # H2 + H3 · H1 ไม่ผ่านต้องตรวจบั๊กก่อน
 → outputs/experiments/E18/*.csv, results/e18/*.csv
 """
 import copy
@@ -103,7 +103,9 @@ def main():
     RES.mkdir(parents=True, exist_ok=True)
     fx.isna().sum().to_frame("n_missing").to_csv(RES / "v9_missing.csv", encoding="utf-8-sig")
     ok = h1(d, rules)
-    if mode == "h1" or not ok:
+    if mode == "h1":
+        return
+    if not ok and "--bug-check-done" not in sys.argv:     # ต้องตรวจบั๊กและบันทึกใน results/e18_report.md ก่อน
         return
     OUT.mkdir(parents=True, exist_ok=True)
     tz, n_boot = rules["timezone"], rules["evaluation"]["n_boot"]
