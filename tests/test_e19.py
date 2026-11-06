@@ -1,5 +1,6 @@
 """E19: ภาพ 1m ไม่รั่วข้อมูล และส่วนประกอบใช้ข้อมูลฝึกเท่านั้น"""
 import importlib.util
+import sys
 
 import numpy as np
 import pandas as pd
@@ -63,6 +64,7 @@ def test_morlet_default_scales_unchanged_and_s_min_starts_at_nyquist():
 
 @pytest.fixture(scope="module")
 def e19():
+    sys.path.insert(0, str(ROOT / "experiments"))
     spec = importlib.util.spec_from_file_location("e19_train", ROOT / "experiments" / "28_e19_train.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)

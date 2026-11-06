@@ -63,12 +63,12 @@ def pca_features(emb, tr, n):
     return PCA(n_components=n, random_state=0).fit(emb[tr]).transform(emb)
 
 
-def a_un_oos(g, cols, rules):
+def a_un_oos(g, cols, rules, days):
     """P(ขึ้น) นอกตัวอย่างของ A-un: ฝึกจากวันก่อนวันนั้นเท่านั้น → Series ตาม index ของ g"""
     d = g["date"].to_numpy()
     X = design_matrix(g, cols, ["session"])
     out = pd.Series(np.nan, index=g.index)
-    for day in np.unique(d):
+    for day in days:
         a, b = (d < day) & g["direction"].notna().to_numpy(), d == day
         if a.sum() < 120:
             continue
@@ -122,8 +122,8 @@ def main():
     pm = ds[ds["session"] == "afternoon"].reset_index(drop=True)
     key = pm["symbol"] + "|" + pm["date"].dt.strftime("%Y-%m-%d")
     cols = next(v for v in load_experiments()["E12"]["variants"] if v["name"] == "fd_lr")["features"]["afternoon"]
-    p1_all = a_un_oos(pm, cols, rules)
     keep = key.isin(pos) & pm["direction"].notna() & pm["p_end"].notna()
+    p1_all = a_un_oos(pm, cols, rules, np.unique(pm.loc[keep, "date"].to_numpy()))
     g = pm[keep].sort_values(["date", "symbol"]).reset_index(drop=True)
     p1 = p1_all[keep.to_numpy()].reindex(pm[keep].sort_values(["date", "symbol"]).index).to_numpy(float)
     imgs = z["img"][[pos[k] for k in (g["symbol"] + "|" + g["date"].dt.strftime("%Y-%m-%d"))]]
