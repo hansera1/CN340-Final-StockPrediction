@@ -1,3 +1,3 @@
 ﻿group,session,n_models,n_days,pbo,spread,best,worst
-E20 CNN fine-tune,morning,6,598,0.376984126984127,0.009178815171659416,resnet18_s3,densenet121_s1
-E20 CNN fine-tune,afternoon,6,495,0.5396825396825397,0.007987379146410789,E0,densenet121_s2
+E20 CNN fine-tune,morning,18,598,0.11904761904761904,0.013049995118887936,resnet18_s3_x20,alexnet_s3
+E20 CNN fine-tune,afternoon,18,495,0.8412698412698413,0.014541238425529346,vgg16_bn_s3,alexnet_s3

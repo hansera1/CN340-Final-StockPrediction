@@ -348,6 +348,42 @@ def part_cnn_report(d, rules, tz, prefix="cnn"):
     print(b.round(4).to_string(index=False), flush=True)
 
 
+def part_b_price(d, rules, tz):
+    """E20b: RMSE และ MAE ของราคา เทียบ PR-A และ P(c) — รายงานเท่านั้น"""
+    s32.CONF = CONF
+    feq, fup = [pd.read_csv(OUT / f"tab_b_{t}.csv") for t in ("flat_price", "price_updown")]
+    for f in (feq, fup):
+        f["date"] = pd.to_datetime(f["date"], utc=True).dt.tz_convert(tz)
+    eqA, upA = [s18.load("C1235", n, tz) for n in ("E9FLAT_aprice_lr", "E9FLAT_pprice_lr")]
+    names = ALL + ["ENS", "SHR"]
+    px = d[KEYS + ["p_ref", "p_end"]].merge(eqA[KEYS + ["p_up"]].rename(columns={"p_up": "eq_A"}), on=KEYS).merge(upA[KEYS + ["p_up"]].rename(columns={"p_up": "up_A"}), on=KEYS)
+    px = px.merge(feq[KEYS + names].rename(columns={n: f"eq_{n}" for n in names}), on=KEYS).merge(fup[KEYS + names].rename(columns={n: f"up_{n}" for n in names}), on=KEYS)
+    px = px[px["p_end"].notna() & px["p_ref"].notna()].sort_values(KEYS).reset_index(drop=True)
+    pref, pend = px["p_ref"].to_numpy(float), px["p_end"].to_numpy(float)
+    ea = pend - s18.price_rule(pref, px["eq_A"].to_numpy(), px["up_A"].to_numpy())[0]
+    rows = []
+    for n in ["P(c)"] + names:
+        if n == "P(c)":
+            pt, shift = pref, np.zeros(len(pref))
+        else:
+            pt, shift = s18.price_rule(pref, px[f"eq_{n}"].to_numpy(), px[f"up_{n}"].to_numpy())
+        e = pend - pt
+        for label, sym, sess in [("เช้า", None, "morning"), ("บ่าย", None, "afternoon"), ("KBANK เช้า", "KBANK", "morning"), ("KBANK บ่าย", "KBANK", "afternoon"), ("ADVANC เช้า", "ADVANC", "morning"), ("ADVANC บ่าย", "ADVANC", "afternoon")]:
+            m = (px["session"] == sess).to_numpy()
+            if sym:
+                m &= (px["symbol"] == sym).to_numpy()
+            dates = px["date"].astype(str).to_numpy()[m]
+            mae = s33.boot_ci(np.abs(e[m]) - np.abs(ea[m]), dates, CONF, 2000)
+            rm = s32.boot_rmse(e[m], ea[m], dates, 2000)
+            rows.append({"model": n, "group": label, "n": int(m.sum()), "rmse": np.sqrt((e[m] ** 2).mean()), "rmse_PR-A": np.sqrt((ea[m] ** 2).mean()), "d_rmse": rm[0], "d_rmse_lo": rm[1], "d_rmse_hi": rm[2],
+                         "mae": np.abs(e[m]).mean(), "mae_PR-A": np.abs(ea[m]).mean(), "d_mae": mae[0], "d_mae_lo": mae[1], "d_mae_hi": mae[2], "shift_rate": (shift[m] != 0).mean()})
+    t = pd.DataFrame(rows)
+    t.to_csv(RES / "price_compare_b.csv", index=False, encoding="utf-8-sig")
+    pd.set_option("display.width", 200)
+    print(t[t["group"].isin(["เช้า", "บ่าย"])][["model", "group", "rmse", "rmse_PR-A", "d_rmse", "d_rmse_lo", "d_rmse_hi", "mae", "d_mae", "shift_rate"]].round(3).to_string(index=False))
+    print(t[(t["model"].isin(["SHR", "lr"])) & ~t["group"].isin(["เช้า", "บ่าย"])][["model", "group", "rmse", "rmse_PR-A", "d_rmse", "d_rmse_lo", "d_rmse_hi"]].round(3).to_string(index=False))
+
+
 # ---------- ตัดสิน ----------
 def as_long(wide, names, e0):
     out = {}
@@ -493,6 +529,8 @@ def main():
         PARAMS, K_TOP, K_C, CNN_PCA, CNN_C = PARAMS2, 5, 0.001, 3, 0.001
         part_tab(d, rules, exps, tag="_b")
         part_cnn(ds, rules, tag="_b")
+    if "b_price" in args.part:
+        part_b_price(d, rules, tz)
     if "b_cnn_all" in args.part:
         part_cnn_all(ds, rules, tz, {**STRICT, "epochs": 15, "lr_head": 1e-4, "lr_block": 1e-5, "weight_decay": 0.5}, prefix="cnnb")
     if "b_cnn_report" in args.part:
