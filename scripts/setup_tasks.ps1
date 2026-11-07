@@ -39,9 +39,10 @@ function Add-Task($name, $time, $scriptArgs, [switch]$CatchUp) {
 
 # 18:00, not 17:30: a Settrade login here kicks the session of the VM evening job (same credentials)
 Add-Task "kbank_advanc_collect_daily" "18:00" "00_collect_daily.py" -CatchUp
-Add-Task "kbank_advanc_watchdog_morning" $t[2] "10_watchdog.py morning"
-Add-Task "kbank_advanc_watchdog_afternoon" $t[3] "10_watchdog.py afternoon"
 if ($WithPredict) {
+    # Watchdogs check for a local submission file, so they only belong on the machine that predicts (false alarm otherwise)
+    Add-Task "kbank_advanc_watchdog_morning" $t[2] "10_watchdog.py morning"
+    Add-Task "kbank_advanc_watchdog_afternoon" $t[3] "10_watchdog.py afternoon"
     Add-Task "kbank_advanc_predict_morning" $t[0] "05_predict_live.py morning" -CatchUp
     Add-Task "kbank_advanc_predict_afternoon" $t[1] "05_predict_live.py afternoon" -CatchUp
 }
