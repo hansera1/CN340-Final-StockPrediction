@@ -138,15 +138,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", type=int, help="ฝึกขั้นต่ำ n วัน เพื่อตรวจ pipeline เท่านั้น")
     ap.add_argument("--explore", type=int, help="ฝึกขั้นต่ำ n วัน สเปกเต็ม — รันสำรวจ ไม่ผ่านเกณฑ์ที่ลงทะเบียน")
+    ap.add_argument("--minutes", type=int, default=1, choices=[1, 5], help="ภาพจากแท่ง 5 นาที: e19_images_5m.npz (สร้างด้วย 27_e19_1m_scalogram.py --minutes 5) · ใช้คู่กับ --explore")
     args = ap.parse_args()
     smoke, explore = args.smoke is not None, args.explore is not None
+    suffix = "" if args.minutes == 1 else f"_{args.minutes}m"
     min_train, epochs, seeds = (args.smoke, 2, (0,)) if smoke else (args.explore if explore else MIN_TRAIN, 30, (0, 1, 2))
     torch.backends.cudnn.deterministic = True
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rules = load_rules()
     assert rules["label"]["price_1630"] == "closing_auction"
     ds = load_or_build_dataset(rules, tag="_e19", rebuild=True)
-    z = np.load(PROCESSED_DIR / "e19_images.npz", allow_pickle=False)
+    z = np.load(PROCESSED_DIR / f"e19_images{suffix}.npz", allow_pickle=False)
     pos = {k: i for i, k in enumerate(z["keys"].tolist())}
     pm = ds[ds["session"] == "afternoon"].reset_index(drop=True)
     key = pm["symbol"] + "|" + pm["date"].dt.strftime("%Y-%m-%d")
@@ -165,7 +167,7 @@ def main():
     if not smoke and not explore and len(test_days) < MIN_TEST:
         print(f"วัดผลไม่ได้: วันทดสอบ {len(test_days)} < {MIN_TEST} · ต้องมีอย่างน้อย {MIN_TRAIN + MIN_TEST} วัน")
         return
-    out = OUTPUT_DIR / "experiments" / ("E19_smoke" if smoke else "E19_explore" if explore else "E19")
+    out = OUTPUT_DIR / "experiments" / (("E19_smoke" if smoke else "E19_explore" if explore else "E19") + suffix)
     hist = pm[pm["direction"].notna()]
     out.mkdir(parents=True, exist_ok=True)
     kinds = ["S0-pca3", "S0-pca5", "S0-LR", "S1", "S2"]
@@ -204,7 +206,7 @@ def main():
         print("** SMOKE: ตรวจ pipeline เท่านั้น ห้ามอ้างเป็นผล **")
     elif explore:
         t = t.join(explore_ci(r), on=["arch", "kind"])
-        t.to_csv(ROOT / "results" / "e19" / "explore_metrics.csv", index=False, encoding="utf-8-sig")
+        t.to_csv(ROOT / "results" / "e19" / f"explore_metrics{suffix}.csv", index=False, encoding="utf-8-sig")
         print("** EXPLORE: ข้อมูลน้อยเกินสรุป ไม่ผ่านเกณฑ์ที่ลงทะเบียน ไม่ใช้ตัดสิน **")
     else:
         t.to_csv(ROOT / "results" / "e19" / "metrics.csv", index=False, encoding="utf-8-sig")

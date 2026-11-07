@@ -8,7 +8,7 @@ import pytest
 
 from forecast.config import ROOT, load_rules
 from forecast.features.images import morlet_cwt
-from forecast.features.scalogram_1m import MIN_BARS, image_for_day, pick_source
+from forecast.features.scalogram_1m import MIN_BARS, coarsen, image_for_day, pick_source
 
 RULES = load_rules()
 TZ = RULES["timezone"]
@@ -41,6 +41,27 @@ def test_last_morning_bar_is_used():
     moved = b.copy()
     moved.loc[moved["bar_end"] == DAY + pd.Timedelta("12:30:00"), "close"] *= 1.1
     assert not np.array_equal(image_for_day(b, DAY, RULES), image_for_day(moved, DAY, RULES))
+
+
+def test_5m_image_has_no_leak_and_uses_last_block():
+    b = bars()
+    base = image_for_day(b, DAY, RULES, 5)
+    assert base.shape == (3, 224, 224) and not np.array_equal(base, image_for_day(b, DAY, RULES))
+    after = b.copy()
+    late = after["bar_end"] > DAY + pd.Timedelta("12:30:00")
+    after.loc[late, ["close", "volume"]] *= 3
+    np.testing.assert_array_equal(base, image_for_day(after, DAY, RULES, 5))
+    last = b.copy()
+    last.loc[last["bar_end"] == DAY + pd.Timedelta("12:30:00"), "close"] *= 1.1
+    assert not np.array_equal(base, image_for_day(last, DAY, RULES, 5))
+
+
+def test_coarsen_takes_last_close_and_sums_volume():
+    c, v = coarsen(np.arange(1.0, 151.0), np.ones(150), 5)
+    assert len(c) == 30 and c[0] == 5 and c[-1] == 150
+    assert (v == 5).all()
+    c1, v1 = coarsen(np.arange(1.0, 151.0), np.ones(150), 1)
+    assert len(c1) == 150 and len(v1) == 150
 
 
 def test_too_few_bars_gives_no_image_and_falls_back_to_other_source():

@@ -39,12 +39,20 @@ def image_from_series(close, volume):
     return np.clip(_resize(np.stack(chans).astype(np.float32)), 0, 1)
 
 
-def image_for_day(bars, date, rules):
-    """→ ภาพ uint8 (3, 224, 224) หรือ None ถ้าแท่งจริงไม่ถึง MIN_BARS"""
+def coarsen(close, volume, minutes):
+    """ตาราง 1m → แท่งละ minutes นาที: ราคาปิดท้ายแท่ง, volume รวม"""
+    if minutes == 1:
+        return close, volume
+    n = len(close) // minutes
+    return close[minutes - 1::minutes][:n], volume[:n * minutes].reshape(n, minutes).sum(1)
+
+
+def image_for_day(bars, date, rules, minutes=1):
+    """→ ภาพ uint8 (3, 224, 224) หรือ None ถ้าแท่ง 1m จริงไม่ถึง MIN_BARS · minutes = 5 ใช้แท่ง 5 นาทีจากแท่ง 1m ชุดเดียวกัน"""
     b = morning_bars(bars, date, rules)
     if len(b) < MIN_BARS:
         return None
-    return np.round(image_from_series(*to_grid(b, date, rules)) * 255).astype(np.uint8)
+    return np.round(image_from_series(*coarsen(*to_grid(b, date, rules), minutes)) * 255).astype(np.uint8)
 
 
 def pick_source(settrade, yfinance, date, rules):
