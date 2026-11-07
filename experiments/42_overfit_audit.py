@@ -241,7 +241,7 @@ def pbo_row(name, models, s=10):
         if len(per_day) < 3:
             continue
         t = pd.DataFrame(per_day).dropna()
-        if len(t) < 2 * s:
+        if len(t) < s:
             rows.append({"group": name, "session": sess, "n_models": len(per_day), "n_days": len(t), "pbo": np.nan, "spread": np.nan, "best": "", "worst": ""})
             continue
         mean = t.mean()
@@ -275,9 +275,10 @@ def part_pbo(ds, d, rules, tz):
         j = un.merge(h[KEYS + [col]], on=KEYS)
         r7[name] = j[KEYS].assign(ll=ll(j["_y"].to_numpy(float), j[col]))
     c = load_pred(EXP / "E14" / "cprime_predictions.csv", tz)
-    for col in [x for x in c.columns if x.startswith("p_")]:
+    # C-adv มีค่าเฉพาะแถว KBANK ช่อง 1 บาท (95 วัน) จึงไม่อยู่ในกลุ่มที่ใช้ทุกแถว
+    for name, col in [("E14 C′-pretrain", "p_pre"), ("E14 C′", "p_cprime")]:
         j = un.merge(c[KEYS + [col]], on=KEYS)
-        r7[f"E14 {col}"] = j[KEYS].assign(ll=ll(j["_y"].to_numpy(float), j[col]))
+        r7[name] = j[KEYS].assign(ll=ll(j["_y"].to_numpy(float), j[col]))
     rows += pbo_row("ทิศทางรอบ 7 รวม", r7)
 
     rows += pbo_row("E17b", price_family(d, rules, tz, with_a=False))
@@ -324,6 +325,8 @@ def price_family(d, rules, tz, with_a):
 
 # ---------- ส่วน 3: learning curve ----------
 def curve_row(path):
+    if path.stat().st_size < 5:          # S0 ไม่ได้ฝึก CNN จึงไม่มี curve
+        return None
     c = pd.read_csv(path).dropna(subset=["val_loss"])
     if c.empty:
         return None
