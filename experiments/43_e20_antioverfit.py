@@ -275,6 +275,73 @@ def part_s2(ds, rules):
             print(s, str(np.min(te))[:10], f"{time.perf_counter() - t0:.0f} วิ", flush=True)
 
 
+STRICT = {"seeds": (0,), "epochs": 10, "patience": 2, "lr_head": 3e-4, "lr_block": 3e-5, "weight_decay": 0.2, "target": "up_notup"}
+
+
+def part_cnn_all(ds, rules, tz):
+    """E10 ทุกแบบที่ fine-tune ด้วยค่าเข้มงวด — ไม่เข้าการตัดสิน"""
+    from forecast.evaluation.runner import extra_dataset, experiment_rules, run_variant
+    from forecast.models import finetune
+    exps = load_experiments()
+    r10 = experiment_rules(rules, exps["E10"])
+    dd = ds.reset_index(drop=True)
+    imgs = images_for(dd, rules, "scalogram", tag="_e20wf")
+    both, big = None, None
+    for v in exps["E10"]["variants"]:
+        n = v["name"]
+        path = OUT / f"cnn_{n}.csv"
+        if v["model"] != "finetune" or n.endswith("_s0") or path.exists():
+            continue
+        t0 = time.perf_counter()
+        var = {**v, "params": {**v["params"], **STRICT}}
+        try:
+            if v.get("extra_symbols"):
+                if both is None:
+                    ext = extra_dataset(rules, v["extra_symbols"])
+                    ext = ext[ext["date"].isin(dd["date"].unique())]
+                    both = pd.concat([dd, ext], ignore_index=True)
+                    big = images_for(both, rules, "scalogram", tag="_e20wf_x20")
+                p = run_variant(both, var, r10, seqs=big, test_symbols=rules["symbols"])
+            else:
+                p = run_variant(dd, var, r10, seqs=imgs)
+            p[KEYS + ["p_up"]].to_csv(path, index=False)
+            pd.DataFrame(finetune.CURVES).to_csv(OUT / f"cnn_{n}_curves.csv", index=False)
+            print(n, f"{time.perf_counter() - t0:.0f} วิ", len(p), flush=True)
+        except Exception as e:
+            print(n, "ล้ม:", repr(e)[:300], flush=True)
+        finetune.CURVES.clear()
+
+
+def part_cnn_report(d, rules, tz):
+    un = e0_wf(d, "up_notup", rules)
+    rows, fam = [], {}
+    s2 = OUT / "s2_strong.csv"
+    files = sorted(OUT.glob("cnn_*.csv"))
+    for f in files + ([s2] if s2.exists() else []):
+        if f.stem.endswith("_curves") or f.stem == "cnn_frozen":
+            continue
+        n = "resnet18_s2" if f == s2 else f.stem.replace("cnn_", "")
+        p = load_pred(f, tz).rename(columns={"p_up": "p"})
+        for s in SESSIONS:
+            rows.append({"model": n, "session": s, **test_gain(p, un, s)})
+        j = un.merge(p[KEYS + ["p"]], on=KEYS)
+        fam[n] = j[KEYS].assign(ll=ll(j["_y"].to_numpy(float), j["p"]))
+        c = OUT / ("s2_strong_curves.csv" if f == s2 else f"{f.stem}_curves.csv")
+        if c.exists():
+            r = s42.curve_row(c)
+            if r:
+                rows[-1].update({k: r[k] for k in ("best_epoch_median", "last_epoch_median", "train_drop_after", "val_rise_after")})
+                rows[-2].update({k: r[k] for k in ("best_epoch_median", "last_epoch_median", "train_drop_after", "val_rise_after")})
+    t = pd.DataFrame(rows)
+    t["overfit_early"] = (t["best_epoch_median"] <= 3) & (t["train_drop_after"] > 0)
+    t.to_csv(RES / "cnn_finetune.csv", index=False, encoding="utf-8-sig")
+    print(t.round(4).to_string(index=False), flush=True)
+    fam["E0"] = un[KEYS].assign(ll=ll(un["_y"].to_numpy(float), un["e0"]))
+    b = pd.DataFrame(pbo_row("E20 CNN fine-tune", fam))
+    b.to_csv(RES / "pbo_cnn_finetune.csv", index=False, encoding="utf-8-sig")
+    print(b.round(4).to_string(index=False), flush=True)
+
+
 # ---------- ตัดสิน ----------
 def as_long(wide, names, e0):
     out = {}
@@ -411,6 +478,10 @@ def main():
         part_decide(d, ds, rules, tz)
     if "s2" in args.part:
         part_s2(ds, rules)
+    if "cnn_all" in args.part:
+        part_cnn_all(ds, rules, tz)
+    if "cnn_report" in args.part:
+        part_cnn_report(d, rules, tz)
 
 
 if __name__ == "__main__":
