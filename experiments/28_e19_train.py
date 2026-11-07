@@ -30,6 +30,8 @@ warnings.filterwarnings("ignore")
 ARCHS = ["resnet18", "vgg16_bn", "densenet121"]
 MIN_TRAIN, MIN_TEST = 20, 5
 CS = (0.003, 0.01, 0.03, 0.1)
+STAGE2_LAM = 45.0
+FT_KW = {"patience": 5}
 
 
 def extractor(arch, dev):
@@ -83,7 +85,7 @@ def fit_predict(kind, arch, emb, imgs, g, y, tr, te, p1, rules, epochs, seeds):
     dates = g["date"].to_numpy()
     if kind in ("S0-pca3", "S0-pca5"):
         F = pca_features(emb, tr, int(kind[-1]))
-        return Stage2(45.0).fit(F[tr], y[tr], p1[tr]).predict(F[te], p1[te])
+        return Stage2(STAGE2_LAM).fit(F[tr], y[tr], p1[tr]).predict(F[te], p1[te])
     if kind == "S0-LR":
         a, b = last_days_split(dates[tr], 0.25)
         scores = {}
@@ -95,7 +97,7 @@ def fit_predict(kind, arch, emb, imgs, g, y, tr, te, p1, rules, epochs, seeds):
         C = min(scores, key=scores.get) if scores else 0.01
         return make_pipeline(StandardScaler(), LogisticRegression(C=C, max_iter=2000)).fit(X, yy).predict_proba(emb[te])[:, 1]
     stage = kind.lower()
-    m = FineTuneModel(rules["quantiles"], arch=arch, stage=stage, seeds=seeds, epochs=epochs, patience=5, target="up_notup")
+    m = FineTuneModel(rules["quantiles"], arch=arch, stage=stage, seeds=seeds, epochs=epochs, target="up_notup", **FT_KW)
     idx = g.index
     m.fit(pd.DataFrame(index=idx[tr]), g["up"].to_numpy()[tr], g["z"].to_numpy()[tr], g[tr], imgs[tr])
     return m.predict(pd.DataFrame(index=idx[te]), g[te], imgs[te])["p_up"].to_numpy()
@@ -139,16 +141,23 @@ def main():
     ap.add_argument("--smoke", type=int, help="ฝึกขั้นต่ำ n วัน เพื่อตรวจ pipeline เท่านั้น")
     ap.add_argument("--explore", type=int, help="ฝึกขั้นต่ำ n วัน สเปกเต็ม — รันสำรวจ ไม่ผ่านเกณฑ์ที่ลงทะเบียน")
     ap.add_argument("--minutes", type=int, default=1, choices=[1, 5], help="ภาพจากแท่ง 5 นาที: e19_images_5m.npz (สร้างด้วย 27_e19_1m_scalogram.py --minutes 5) · ใช้คู่กับ --explore")
+    ap.add_argument("--strong", action="store_true", help="E20: regularization แรงกว่าเดิม ใช้คู่กับ --explore")
     args = ap.parse_args()
     smoke, explore = args.smoke is not None, args.explore is not None
     suffix = "" if args.minutes == 1 else f"_{args.minutes}m"
+    img_suffix = suffix
+    if args.strong:      # E20: results/e20_preregistration.md
+        global CS, STAGE2_LAM, FT_KW
+        CS, STAGE2_LAM = (0.0003, 0.001), 200.0
+        FT_KW = {"patience": 2, "lr_head": 3e-4, "lr_block": 3e-5, "weight_decay": 0.2}
+        suffix += "_strong"
     min_train, epochs, seeds = (args.smoke, 2, (0,)) if smoke else (args.explore if explore else MIN_TRAIN, 30, (0, 1, 2))
     torch.backends.cudnn.deterministic = True
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rules = load_rules()
     assert rules["label"]["price_1630"] == "closing_auction"
     ds = load_or_build_dataset(rules, tag="_e19", rebuild=True)
-    z = np.load(PROCESSED_DIR / f"e19_images{suffix}.npz", allow_pickle=False)
+    z = np.load(PROCESSED_DIR / f"e19_images{img_suffix}.npz", allow_pickle=False)
     pos = {k: i for i, k in enumerate(z["keys"].tolist())}
     pm = ds[ds["session"] == "afternoon"].reset_index(drop=True)
     key = pm["symbol"] + "|" + pm["date"].dt.strftime("%Y-%m-%d")
