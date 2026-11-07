@@ -1,0 +1,11 @@
+﻿session,k,n,n_days
+afternoon,0.0,760,380
+afternoon,0.25,80,40
+afternoon,0.5,52,26
+afternoon,0.75,60,30
+afternoon,1.0,40,20
+morning,0.0,260,130
+morning,0.25,160,80
+morning,0.5,100,50
+morning,0.75,30,15
+morning,1.0,646,323

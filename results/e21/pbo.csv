@@ -1,0 +1,3 @@
+﻿group,session,n_models,n_days,pbo,spread,best,worst
+E21,morning,8,598,0.10317460317460317,0.003880950570695596,tab_lr,cnn1d_3
+E21,afternoon,8,495,0.7341269841269841,0.0056256118948564415,tab_lr,resnet18_s2

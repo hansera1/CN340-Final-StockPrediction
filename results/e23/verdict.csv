@@ -1,0 +1,3 @@
+﻿session,model,c1_rmse,c2_stocks,c3_mae,pass
+เช้า,skip_cnn_fx,False,True,True,False
+บ่าย,skip_cnn,False,True,True,False

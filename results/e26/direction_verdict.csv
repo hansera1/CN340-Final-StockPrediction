@@ -1,0 +1,5 @@
+﻿group,session,a,b,pass
+F1,เช้า,A-ud+F1,A-ud,False
+F1,บ่าย,MLP+F1,MLP,False
+F2,เช้า,A-ud+F2,A-ud,True
+F2,บ่าย,MLP+F2,MLP,False

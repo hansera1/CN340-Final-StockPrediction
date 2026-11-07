@@ -284,7 +284,7 @@ def main():
         if g == "F3":
             parts = []
             for s, _ in SESSIONS:
-                h = d[(d["session"] == s) & d["p_start"].notna()]
+                h = d[d["session"] == s]     # แถวไม่มี P(เปิด): ไม่เข้าการฝึก แต่ยังได้ค่าทาย |r|
                 blocks = [te for _, te in walk_forward_splits(h["date"].to_numpy(), ev["test_block_days"], ev["min_train_days"], ev["holdout_days"])]
                 parts.append(predict_abs_r(h, GROUPS["F3"][s], blocks))
             ar = x[KEYS].merge(pd.concat(parts, ignore_index=True), on=KEYS, how="left")["abs_r"].to_numpy(float)

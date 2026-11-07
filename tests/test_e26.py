@@ -81,6 +81,15 @@ def test_with_features_handles_both_formats(e26):
     assert e26.with_features({"features": {"morning": ["x"], "afternoon": ["y"]}}, extra)["features"] == {"morning": ["x", "a"], "afternoon": ["y", "a", "b"]}
 
 
+def test_row_without_session_open_still_gets_a_prediction(e26):
+    days = pd.bdate_range("2025-01-06", periods=130, tz=TZ).to_numpy()
+    rng = np.random.default_rng(0)
+    g = pd.DataFrame({"date": days, "symbol": "KBANK", "session": "afternoon", "p_start": 100.0, "p_end": 100 * np.exp(rng.normal(0, 0.01, 130)), "x": rng.normal(size=130)})
+    g.loc[125, "p_start"] = np.nan
+    got = e26.predict_abs_r(g, ["x"], [days[120:125], days[125:130]])
+    assert got["abs_r"].iloc[120:].notna().all()
+
+
 def test_abs_r_prediction_uses_only_earlier_days(e26):
     days = pd.bdate_range("2025-01-06", periods=170, tz=TZ).to_numpy()
     rng = np.random.default_rng(0)

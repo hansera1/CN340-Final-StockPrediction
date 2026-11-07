@@ -248,7 +248,8 @@ def report(rules):
     res = s42.load_pred(OUTPUT_DIR / "experiments" / "E20" / "cnnb_resnet18_s2.csv", tz).rename(columns={"p_up": "resnet18_s2"})
     x = d[KEYS + ["direction"]].merge(un[KEYS + ["e0"]], on=KEYS).merge(p, on=KEYS).merge(res[KEYS + ["resnet18_s2"]], on=KEYS)
     x = x[x["direction"].notna()].sort_values(KEYS).reset_index(drop=True)
-    assert len(x) == len(p) == len(res), (len(x), len(p), len(res))
+    labeled = p.merge(d[KEYS + ["direction"]], on=KEYS)["direction"].notna().sum()     # แถวที่ไม่มีป้ายไม่ถูกนับ
+    assert len(p) == len(res) and len(x) == labeled, (len(x), labeled, len(p), len(res))
     x = x.rename(columns={m: f"p_{m}" for m in ORDER})
     y = (x["direction"] == 1).to_numpy(float)
     rows, fam = [], {}

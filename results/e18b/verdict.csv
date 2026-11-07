@@ -1,0 +1,4 @@
+﻿model,c1_rmse,c2_stocks,c3_mae,c4_coverage,pass,chosen
+H2b-0,False,True,True,True,False,False
+H2b-rule,False,True,True,True,False,False
+H2b-mean,False,True,True,False,False,False
