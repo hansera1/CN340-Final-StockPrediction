@@ -43,6 +43,12 @@ TREE = {"n": 60, "lr": 0.02, "depth": 2, "leaves": 3, "leaf": 100, "sub": 0.6, "
 PARAMS = {"lr": ("lr", {"C": 0.001}), "enet": ("enet", {"C": 0.01, "l1_ratio": 0.5}), "svm": ("svm", {"C": 0.001}),
           "rf": ("rf", {"n": 200, "depth": 2, "leaf": 100, "mf": 0.3}), "mlp": ("mlp", {"hidden": (4,), "alpha": 30.0}),
           "lgbm": ("lgbm", TREE), "xgb": ("xgb", TREE)}
+K_TOP, K_C = 10, 0.003
+TREE2 = {"n": 40, "lr": 0.01, "depth": 1, "leaves": 2, "leaf": 200, "sub": 0.6, "col": 0.4, "l2": 50.0}
+PARAMS2 = {"lr": ("lr", {"C": 0.0003}), "enet": ("enet", {"C": 0.003, "l1_ratio": 0.5}), "svm": ("svm", {"C": 0.0003}),
+           "rf": ("rf", {"n": 300, "depth": 1, "leaf": 200, "mf": 0.2}), "mlp": ("mlp", {"hidden": (4,), "alpha": 10.0}),
+           "lgbm": ("lgbm", TREE2), "xgb": ("xgb", TREE2)}
+CNN_PCA, CNN_C = 10, 0.01
 SK = ["lr", "lr_k10", "enet", "svm", "rf", "mlp"]
 ALL = SK + ["lgbm", "xgb"]
 
@@ -52,8 +58,8 @@ def fit_predict_one(name, Xa, y, Xs):
     if name == "lr_k10":
         Z = SimpleImputer(strategy="median", keep_empty_features=True).fit_transform(Xa)
         c = np.nan_to_num(np.abs([np.corrcoef(Z[:, j], y)[0, 1] if Z[:, j].std() > 0 else 0.0 for j in range(Z.shape[1])]))
-        use = np.argsort(-c)[:10]
-        m = build("lr", {"C": 0.003}, 0).fit(Xa[:, use], y)
+        use = np.argsort(-c)[:K_TOP]
+        m = build("lr", {"C": K_C}, 0).fit(Xa[:, use], y)
         return [proba(m, x[:, use]) for x in Xs]
     kind, p = PARAMS[name]
     m = build(kind, p, 0).fit(Xa, y)
@@ -120,7 +126,7 @@ def overfit_table(wide, tr, e0, target, family, names):
     return t
 
 
-def part_tab(d, rules, exps):
+def part_tab(d, rules, exps, tag=""):
     starts = s42.starts_by_session()
     fd = next(v for v in exps["E12"]["variants"] if v["name"] == "fd_lr")["features"]
     v = {x["name"]: x for x in exps["E9FLAT"]["variants"]}
@@ -133,18 +139,18 @@ def part_tab(d, rules, exps):
     for target, cols in sets.items():
         t0 = time.perf_counter()
         wide, tr = run_tab(d, cols, target, ALL, rules, starts)
-        wide.to_csv(OUT / f"tab_{target}.csv", index=False)
+        wide.to_csv(OUT / f"tab{tag}_{target}.csv", index=False)
         tables.append(overfit_table(wide, tr, e0_wf(d, target, rules), target, f"E20 {target}", ALL + ["ENS", "SHR"]))
         print(target, f"{time.perf_counter() - t0:.0f} วิ", flush=True)
     t0 = time.perf_counter()
     cols = {s: list(fd[s]) + ["d_sym_advanc"] for s in SESSIONS}
     wide, tr = run_tab(d, cols, "updown", ["lr"], rules, starts)
     wide = wide.rename(columns={"lr": "A-ud-strong"})
-    wide.to_csv(OUT / "tab_aud_strong.csv", index=False)
+    wide.to_csv(OUT / f"tab{tag}_aud_strong.csv", index=False)
     tables.append(overfit_table(wide, tr.assign(model="A-ud-strong"), e0_wf(d, "updown", rules), "updown", "E20 A-ud-strong", ["A-ud-strong"]))
     print("A-ud-strong", f"{time.perf_counter() - t0:.0f} วิ", flush=True)
     t = pd.concat(tables, ignore_index=True)
-    t.to_csv(RES / "train_vs_test.csv", index=False, encoding="utf-8-sig")
+    t.to_csv(RES / f"train_vs_test{tag}.csv", index=False, encoding="utf-8-sig")
     print(t[["family", "model", "session", "train_gain", "test_gain", "test_lo", "test_hi", "gap", "verdict"]].round(4).to_string(index=False), flush=True)
 
 
@@ -207,7 +213,7 @@ def cnn_block(emb, g, y, te, start_check):
     dates = g["date"].to_numpy()
     start = np.min(te)
     a, t = (dates < start) & (y >= 0), np.isin(dates, te)
-    m = make_pipeline(StandardScaler(), PCA(n_components=10, random_state=0), LogisticRegression(C=0.01, max_iter=2000)).fit(emb[a], y[a])
+    m = make_pipeline(StandardScaler(), PCA(n_components=CNN_PCA, random_state=0), LogisticRegression(C=CNN_C, max_iter=2000)).fit(emb[a], y[a])
     out = g.loc[t, KEYS].assign(p=m.predict_proba(emb[t])[:, 1])
     if str(start)[:10] not in start_check:
         return out, None
@@ -217,7 +223,7 @@ def cnn_block(emb, g, y, te, start_check):
     return out, {"start": str(start)[:10], "train_gain": ll(ya, r).mean() - ll(ya, m.predict_proba(emb[a])[:, 1]).mean()}
 
 
-def part_cnn(ds, rules):
+def part_cnn(ds, rules, tag=""):
     import torch
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ev = rules["evaluation"]
@@ -244,11 +250,11 @@ def part_cnn(ds, rules):
             tr = [r[1]["train_gain"] for r in res if r[1]]
             rows.append({"family": "E20 CNN ตรึง backbone", "model": arch, "target": "up_notup", "session": s, "n_ckpt": len(tr), "train_gain": np.mean(tr), **test_gain(p, e0, s)})
         print(arch, f"{time.perf_counter() - t0:.0f} วิ", flush=True)
-    pd.concat(preds, ignore_index=True).to_csv(OUT / "cnn_frozen.csv", index=False)
+    pd.concat(preds, ignore_index=True).to_csv(OUT / f"cnn_frozen{tag}.csv", index=False)
     t = pd.DataFrame(rows)
     t["gap"] = t["train_gain"] - t["test_gain"]
     t["verdict"] = t.apply(verdict, axis=1)
-    t.to_csv(RES / "cnn_frozen.csv", index=False, encoding="utf-8-sig")
+    t.to_csv(RES / f"cnn_frozen{tag}.csv", index=False, encoding="utf-8-sig")
     print(t[["model", "session", "train_gain", "test_gain", "test_lo", "test_hi", "gap", "verdict"]].round(4).to_string(index=False), flush=True)
 
 
@@ -278,7 +284,7 @@ def part_s2(ds, rules):
 STRICT = {"seeds": (0,), "epochs": 10, "patience": 2, "lr_head": 3e-4, "lr_block": 3e-5, "weight_decay": 0.2, "target": "up_notup"}
 
 
-def part_cnn_all(ds, rules, tz):
+def part_cnn_all(ds, rules, tz, strict=None, prefix="cnn"):
     """E10 ทุกแบบที่ fine-tune ด้วยค่าเข้มงวด — ไม่เข้าการตัดสิน"""
     from forecast.evaluation.runner import extra_dataset, experiment_rules, run_variant
     from forecast.models import finetune
@@ -289,11 +295,11 @@ def part_cnn_all(ds, rules, tz):
     both, big = None, None
     for v in exps["E10"]["variants"]:
         n = v["name"]
-        path = OUT / f"cnn_{n}.csv"
+        path = OUT / f"{prefix}_{n}.csv"
         if v["model"] != "finetune" or n.endswith("_s0") or path.exists():
             continue
         t0 = time.perf_counter()
-        var = {**v, "params": {**v["params"], **STRICT}}
+        var = {**v, "params": {**v["params"], **(strict or STRICT)}}
         try:
             if v.get("extra_symbols"):
                 if both is None:
@@ -305,22 +311,22 @@ def part_cnn_all(ds, rules, tz):
             else:
                 p = run_variant(dd, var, r10, seqs=imgs)
             p[KEYS + ["p_up"]].to_csv(path, index=False)
-            pd.DataFrame(finetune.CURVES).to_csv(OUT / f"cnn_{n}_curves.csv", index=False)
+            pd.DataFrame(finetune.CURVES).to_csv(OUT / f"{prefix}_{n}_curves.csv", index=False)
             print(n, f"{time.perf_counter() - t0:.0f} วิ", len(p), flush=True)
         except Exception as e:
             print(n, "ล้ม:", repr(e)[:300], flush=True)
         finetune.CURVES.clear()
 
 
-def part_cnn_report(d, rules, tz):
+def part_cnn_report(d, rules, tz, prefix="cnn"):
     un = e0_wf(d, "up_notup", rules)
     rows, fam = [], {}
     s2 = OUT / "s2_strong.csv"
-    files = sorted(OUT.glob("cnn_*.csv"))
+    files = sorted(OUT.glob(f"{prefix}_*.csv"))
     for f in files + ([s2] if s2.exists() else []):
-        if f.stem.endswith("_curves") or f.stem == "cnn_frozen":
+        if f.stem.endswith("_curves") or f.stem.startswith("cnn_frozen"):
             continue
-        n = "resnet18_s2" if f == s2 else f.stem.replace("cnn_", "")
+        n = "resnet18_s2" if f == s2 else f.stem.replace(f"{prefix}_", "")
         p = load_pred(f, tz).rename(columns={"p_up": "p"})
         for s in SESSIONS:
             rows.append({"model": n, "session": s, **test_gain(p, un, s)})
@@ -334,11 +340,11 @@ def part_cnn_report(d, rules, tz):
                 rows[-2].update({k: r[k] for k in ("best_epoch_median", "last_epoch_median", "train_drop_after", "val_rise_after")})
     t = pd.DataFrame(rows)
     t["overfit_early"] = (t["best_epoch_median"] <= 3) & (t["train_drop_after"] > 0)
-    t.to_csv(RES / "cnn_finetune.csv", index=False, encoding="utf-8-sig")
+    t.to_csv(RES / f"{prefix}_finetune.csv", index=False, encoding="utf-8-sig")
     print(t.round(4).to_string(index=False), flush=True)
     fam["E0"] = un[KEYS].assign(ll=ll(un["_y"].to_numpy(float), un["e0"]))
     b = pd.DataFrame(pbo_row("E20 CNN fine-tune", fam))
-    b.to_csv(RES / "pbo_cnn_finetune.csv", index=False, encoding="utf-8-sig")
+    b.to_csv(RES / f"pbo_{prefix}_finetune.csv", index=False, encoding="utf-8-sig")
     print(b.round(4).to_string(index=False), flush=True)
 
 
@@ -482,6 +488,15 @@ def main():
         part_cnn_all(ds, rules, tz)
     if "cnn_report" in args.part:
         part_cnn_report(d, rules, tz)
+    if "b_tab" in args.part:
+        global PARAMS, K_TOP, K_C, CNN_PCA, CNN_C
+        PARAMS, K_TOP, K_C, CNN_PCA, CNN_C = PARAMS2, 5, 0.001, 3, 0.001
+        part_tab(d, rules, exps, tag="_b")
+        part_cnn(ds, rules, tag="_b")
+    if "b_cnn_all" in args.part:
+        part_cnn_all(ds, rules, tz, {**STRICT, "epochs": 15, "lr_head": 1e-4, "lr_block": 1e-5, "weight_decay": 0.5}, prefix="cnnb")
+    if "b_cnn_report" in args.part:
+        part_cnn_report(d, rules, tz, prefix="cnnb")
 
 
 if __name__ == "__main__":
