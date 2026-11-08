@@ -45,12 +45,13 @@ from forecast.live.evening import needs_rerun
 from forecast.live.log_schema import PredictionLog, append_log, read_logs
 from forecast.live.notify import notify
 from forecast.live.predict import predict_session, predict_shadow_slots
+from forecast.live.slots import show_direction
 
 SESSION_TH = {"morning": "เช้า", "afternoon": "บ่าย"}
 
 COLUMNS = {   # ชื่อภายในของคอลัมน์ไฟล์ส่ง (rules.yaml → submission.columns)
     "date": lambda r, p: r.date, "session": lambda r, p: r.session, "session_th": lambda r, p: SESSION_TH[r.session],
-    "symbol": lambda r, p: r.symbol, "direction": lambda r, p: r.direction, "p_up": lambda r, p: round(r.p_up, 3),
+    "symbol": lambda r, p: r.symbol, "direction": lambda r, p: show_direction(r.direction), "p_up": lambda r, p: round(r.p_up, 3),
     "q10": lambda r, p: p["q10"], "q25": lambda r, p: p["q25"], "q50": lambda r, p: p["q50"],
     "q75": lambda r, p: p["q75"], "q90": lambda r, p: p["q90"],
     "band50": lambda r, p: f"{p['q25']:.2f}–{p['q75']:.2f}", "band80": lambda r, p: f"{p['q10']:.2f}–{p['q90']:.2f}",
@@ -178,7 +179,7 @@ def draft_path(date):
 def same_as_draft(r, d):
     """ทิศทาง P(ขึ้น) และราคาทุก quantile ตรงกับร่าง → (ตรงไหม, รายการที่ต่าง)"""
     diff = []
-    if r.direction != d.direction or abs(r.p_up - d.p_up) > 1e-9:
+    if show_direction(r.direction) != show_direction(d.direction) or abs(r.p_up - d.p_up) > 1e-9:
         diff.append(f"P(ขึ้น) {d.p_up:.4f} → {r.p_up:.4f}")
     for k, v in r.price_quantiles.items():
         if abs(v - d.price_quantiles[k]) > 1e-9:
@@ -290,7 +291,7 @@ def main():
         rows.append({name: COLUMNS[key](r, p) for name, key in sub["columns"].items()})
         detail.append({
             "วันที่": r.date, "รอบ": SESSION_TH[r.session], "หุ้น": r.symbol,
-            "ทิศทาง": r.direction, "P(ขึ้น)": round(r.p_up, 3), "เป้าหมายทิศทาง": r.direction_target,
+            "ทิศทาง": show_direction(r.direction), "P(ขึ้น)": round(r.p_up, 3), "เป้าหมายทิศทาง": r.direction_target,
             "ราคาคาด": p["q50"], "ช่วง 50%": f"{p['q25']:.2f}–{p['q75']:.2f}",
             "ช่วง 80%": f"{p['q10']:.2f}–{p['q90']:.2f}",
             "ราคาอ้างอิง P(c)": r.reference_price, "ที่มา P(c)": r.reference_source,

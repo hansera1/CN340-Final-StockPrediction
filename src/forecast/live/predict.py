@@ -378,7 +378,7 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
             shadows.append(ShadowLog(
                 symbol=sym, session=session, date=str(date.date()), data_cutoff=str(as_of),
                 generated_at=str(datetime.now()), model="E0-ud + ราคาล่าสุด ณ จุดตัด",
-                p_up=float(sp["p_up"]), direction="ขึ้น" if sp["p_up"] >= 0.5 else "ลง",
+                p_up=float(sp["p_up"]), direction="ขึ้น" if sp["p_up"] >= 0.5 else "ไม่ขึ้น",
                 reference_price=p_ref, point_price=float(round_to_tick(p_ref)),
                 price_quantiles={c: float(round_to_tick(p_ref * np.exp(sp[c]))) for c in qcols}))
         except Exception:

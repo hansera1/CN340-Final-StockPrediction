@@ -100,8 +100,13 @@ def test_up_notup_uses_own_folder_per_session():
 
 def test_decide_threshold_by_target():
     from forecast.live.slots import decide
-    assert decide(0.5, "up_down") == "ขึ้น" and decide(0.5, "up_notup") == "ลง"
-    assert decide(0.51, "up_notup") == "ขึ้น" and decide(0.49, "up_down") == "ลง"
+    assert decide(0.5, "up_down") == "ขึ้น" and decide(0.5, "up_notup") == "ไม่ขึ้น"
+    assert decide(0.51, "up_notup") == "ขึ้น" and decide(0.49, "up_down") == "ไม่ขึ้น"
+
+
+def test_old_label_shows_as_not_up():
+    from forecast.live.slots import show_direction
+    assert show_direction("ลง") == "ไม่ขึ้น" and show_direction("ไม่ขึ้น") == "ไม่ขึ้น" and show_direction("ขึ้น") == "ขึ้น"
 
 
 def test_any_sklearn_pipeline_per_slot():

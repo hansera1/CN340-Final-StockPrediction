@@ -51,7 +51,7 @@ def main():
     logs["date"] = pd.to_datetime(logs["date"]).dt.tz_localize(rules["timezone"])
     zq = pd.json_normalize(logs["z_quantiles"]).set_index(logs.index)
     preds = logs[["date", "symbol", "session", "p_up", "model_version", "fallback_reason"]].join(zq)
-    preds["answer"] = logs["direction"].map({"ขึ้น": 1, "ลง": -1, "เท่าเดิม": 0})
+    preds["answer"] = logs["direction"].map({"ขึ้น": 1, "ลง": -1, "ไม่ขึ้น": -1, "เท่าเดิม": 0})   # "ลง" = log ก่อน 8 พ.ย.
     preds["p_ref"] = logs["reference_price"]
     preds["point_price"] = logs["point_price"]
     preds["direction_target"] = logs["direction_target"] if "direction_target" in logs else "up_down"

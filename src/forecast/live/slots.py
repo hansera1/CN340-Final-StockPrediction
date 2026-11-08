@@ -72,6 +72,14 @@ def lock_specs(rules):
     return list(dict.fromkeys(out + [live["shadow"], live["flat_dir"]]))
 
 
+NOT_UP = "ไม่ขึ้น"
+
+
 def decide(p_up, target):
-    """up_down: P ≥ 0.5 (กติกาที่ล็อกเดิม) · up_notup: P > 0.5 · ไฟล์ส่งยังเป็น ขึ้น / ลง"""
-    return "ขึ้น" if (p_up > 0.5 if target == "up_notup" else p_up >= 0.5) else "ลง"
+    """up_down: P ≥ 0.5 (กติกาที่ล็อกเดิม) · up_notup: P > 0.5 · ไฟล์ส่งเป็น ขึ้น / ไม่ขึ้น (อาจารย์ขอ 8 พ.ย.)"""
+    return "ขึ้น" if (p_up > 0.5 if target == "up_notup" else p_up >= 0.5) else NOT_UP
+
+
+def show_direction(direction):
+    """ป้ายในไฟล์ส่ง: log และร่างก่อน 8 พ.ย. เขียน "ลง" ซึ่งหมายถึงไม่ขึ้น"""
+    return NOT_UP if direction == "ลง" else direction
