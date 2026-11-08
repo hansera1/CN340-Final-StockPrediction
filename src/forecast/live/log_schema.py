@@ -36,6 +36,9 @@ class PredictionLog:
     p_final: float | None = None         # E13: หลังชั้น 2 (= p_stage1 ถ้าชั้น 2 ใช้ไม่ได้)
     stage2_betas: dict | None = None
     stage2_reason: str | None = None     # ว่าง = ชั้น 2 ทำงาน · ไม่ว่าง = เหตุผลที่ p_final = p_stage1
+    price_model: str = "PR-A"            # PR-A หรือ E24 S0-mean
+    p_flat: float | None = None          # E24: P(ราคาปลาย = ราคาเปิด)
+    p_updown: float | None = None        # E24: P(ขึ้น | ไม่นิ่ง)
     direction_target: str = "up_down"    # up_down: P(ขึ้น) = P(ขึ้น | ไม่นิ่ง) · up_notup: P(ขึ้น) บนทุกวัน
 
 

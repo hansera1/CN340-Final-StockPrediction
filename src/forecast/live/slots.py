@@ -36,6 +36,15 @@ def support_spec(rules, key):
     return _prefix(rules) + rules["live"][key]
 
 
+def two_step_specs(rules):
+    """E24: (spec ของ P(ราคาปลาย = ราคาเปิด), spec ของ P(ขึ้น | ไม่นิ่ง))"""
+    return support_spec(rules, "flat_dir"), _prefix(rules) + rules["live"]["price_two_step"]["up"]
+
+
+def two_step_enabled(rules):
+    return bool((rules["live"].get("price_two_step") or {}).get("enabled"))
+
+
 def live_specs(rules):
     """{ชื่อที่แสดงใน check_ready: spec} ทุกโมเดลที่วันจริงต้องโหลดได้ (รวมชุดรันเงา)"""
     out = {}
@@ -43,6 +52,8 @@ def live_specs(rules):
         out[f"{s}_dir"] = direction_spec(rules, s)
         out[f"{s}_price_eq"], out[f"{s}_price_up"] = price_specs(rules, s)
     out["shadow"], out["flat_dir"] = support_spec(rules, "shadow"), support_spec(rules, "flat_dir")
+    if two_step_enabled(rules):
+        out["price_two_step_up"] = two_step_specs(rules)[1]
     for i, x in enumerate(rules["live"].get("shadow_slots") or []):
         out[f"เงา {x['slot']} {i + 1}"] = x["spec"]
     return out
@@ -56,6 +67,8 @@ def lock_specs(rules):
             out.append(live["models"][f"{s}_dir"])
     for s in rules["sessions"]:
         out += [live["models"][f"{s}_price"]["eq"], live["models"][f"{s}_price"]["up"]]
+    if two_step_enabled(rules):
+        out.append(live["price_two_step"]["up"])
     return list(dict.fromkeys(out + [live["shadow"], live["flat_dir"]]))
 
 

@@ -37,7 +37,7 @@ from forecast.evaluation.runner import design_matrix
 from forecast.features.dataset import assemble_dataset
 from forecast.labels.make_labels import labels_for
 from forecast.live.log_schema import PredictionLog, ShadowLog
-from forecast.live.slots import decide, direction_spec, direction_target, price_specs, support_spec
+from forecast.live.slots import decide, direction_spec, direction_target, price_specs, support_spec, two_step_enabled, two_step_specs
 from forecast.live.sources import live_bars
 from forecast.live.stage2_live import apply as stage2_apply
 from forecast.models.baseline import BaselineModel
@@ -178,6 +178,21 @@ def decimal_point(p_ref, p_hi, p_lo, z_up, z_dn):
     return p_ref * float(np.exp(p_hi * z_up + p_lo * z_dn))
 
 
+def cond_r_means(ds, sym, session, date):
+    """E[r | ขึ้น] และ E[r | ลง] เทียบราคาเปิดของรอบ จากประวัติของ (หุ้น, รอบ) เดียวกันก่อนวันที่ทาย"""
+    h = ds[(ds["symbol"] == sym) & (ds["session"] == session) & (ds["date"] < date)]
+    r = np.log(h["p_end"].astype(float) / h["p_start"].astype(float)).dropna()
+    return float(r[r > 0].mean()), float(r[r < 0].mean())
+
+
+def two_step_point(p_ref, p_flat, p_updown, r_up, r_dn):
+    """E24 S0-mean: ราคาไม่ปัดช่อง = P(c) · exp((1 − P(นิ่ง)) · (P(ขึ้น|ไม่นิ่ง) · E[r|ขึ้น] + P(ลง|ไม่นิ่ง) · E[r|ลง]))"""
+    point = p_ref * float(np.exp((1 - p_flat) * (p_updown * r_up + (1 - p_updown) * r_dn)))
+    if not np.isfinite(point):
+        raise ValueError("ราคา E24 คำนวณไม่ได้")
+    return point
+
+
 def consistent_point(p_ref, rule_point, p_up, margin):
     """ข้อ 1ง: P(ขึ้น) > 0.5 + margin → P(c) + 1 ช่อง, < 0.5 − margin → P(c) − 1 ช่อง
     นอกนั้นใช้ราคาจากกฎค่ามัธยฐาน ยกเว้นกฎเลื่อนสวนทิศทาง → P(c)"""
@@ -304,8 +319,25 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
         except Exception:
             reasons.append(_err("price model") + " → ราคาจุด = P(c)")
         point_rule, decimal = point, False
+        price_model, p_flat, p_updown, two_step_done = "PR-A", None, None, False
         pc = live.get("price_consistency") or {}
-        if (live.get("price_decimal") or {}).get("enabled"):   # ข้อ B: ส่งทศนิยมได้ (ไม่ใช้คู่กับ price_consistency)
+        if two_step_enabled(rules):   # E24: ล้มทุกกรณี → ราคาจาก PR-A
+            try:
+                flat_spec, updown_spec = two_step_specs(rules)
+                f, _, sf, _ = ml_predict(flat_spec, sym, session, date, get_ds, "P(นิ่ง)")
+                u2, _, su2, _ = ml_predict(updown_spec, sym, session, date, get_ds, "P(ขึ้น|ไม่นิ่ง)")
+                hist = get_ds(1)[0] if get_ds(1)[0] is not None else get_ds(2)[0]
+                p_flat, p_updown = float(f["p_up"]), float(u2["p_up"])
+                point = two_step_point(p_ref, p_flat, p_updown, *cond_r_means(hist, sym, session, date))
+                price_model, decimal, two_step_done = "E24 S0-mean", True, True
+                if max(sf, su2) > 1:
+                    reasons.append(f"ราคา E24: {STEP_TH[max(sf, su2)]}")
+            except Exception:
+                p_flat, p_updown = None, None
+                reasons.append(_err("ราคา E24") + " → ราคาจาก PR-A")
+        if two_step_done:
+            pass
+        elif (live.get("price_decimal") or {}).get("enabled"):   # ข้อ B: ส่งทศนิยมได้ (ไม่ใช้คู่กับ price_consistency)
             hist = get_ds(1)[0] if get_ds(1)[0] is not None else get_ds(2)[0]
             if p_hi is not None and hist is not None:
                 point, decimal = decimal_point(p_ref, p_hi, p_lo, *cond_z_means(hist, sym, session, date)), True
@@ -336,7 +368,7 @@ def predict_session(session, date, rules, raw_dir=None, now=None, source_dirs=No
             fallback_reason="; ".join(dict.fromkeys(reasons)) or None,
             p_stage1=p_stage1, p_final=p_final, stage2_betas=s2_betas, stage2_reason=s2_reason,
             data_source=meta["source"], data_lag_sec=meta["lag_sec"], data_age_min=data_age_min,
-            direction_target=target,
+            direction_target=target, price_model=price_model, p_flat=p_flat, p_updown=p_updown,
         ))
 
         # รันเงา: E0-ud + ราคาล่าสุด ณ จุดตัด — ล้มได้โดยไม่กระทบระบบหลัก

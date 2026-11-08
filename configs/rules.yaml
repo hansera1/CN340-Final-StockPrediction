@@ -98,6 +98,9 @@ live:
   #   (E[z|·] จากประวัติก่อนวันที่ทาย แยกหุ้น/รอบ) ไม่ปัดช่อง · ราคาปัดช่องจากกฎค่ามัธยฐานอยู่ใน log (point_rule)
   #   ใช้แทน price_consistency (ถ้าเปิดทั้งคู่ ใช้อันนี้)
   price_decimal: {enabled: false}
+  # E24 S0-mean (results/e24_report.md): ราคา = P(c) · exp((1 − P(นิ่ง)) · (P(ขึ้น|ไม่นิ่ง) · E[r|ขึ้น] + P(ลง|ไม่นิ่ง) · E[r|ลง]))
+  #   นิ่ง = ราคาปลายเท่าราคาเปิดของรอบ (flat_dir) · ไม่ปัดช่องราคา · ล้ม → PR-A · ใช้แทน price_decimal และ price_consistency
+  price_two_step: {enabled: false, up: E12/fd_lr}
   # ข้อมูลรายวันของวันทำการก่อนยังไม่มา (ข้อ 3): ดึงซ้ำ → สร้างจากแหล่งสำรอง → ส่งด้วยข้อมูลล่าสุดที่มี
   daily_check:
     refetch_attempts: 2      # ขั้น 2: ดึงซ้ำกี่ครั้ง
