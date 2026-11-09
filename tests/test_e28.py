@@ -132,6 +132,6 @@ def test_afternoon_scaler_in_inner_cv_uses_rows_before_each_cut(e28):
         assert same and np.allclose(same[0]["mean"], f["mean"]) and np.allclose(same[0]["std"], f["std"])
 
 
-def test_full_run_is_locked_before_friday_evening(e28):
-    assert not e28.full_run_allowed(pd.Timestamp("2026-11-13 17:59", tz=TZ))
-    assert e28.full_run_allowed(pd.Timestamp("2026-11-13 18:00", tz=TZ))
+def test_full_run_unlocked_by_owner_on_9_nov(e28):
+    assert not e28.full_run_allowed(pd.Timestamp("2026-11-09 21:59", tz=TZ))
+    assert e28.full_run_allowed(pd.Timestamp("2026-11-09 22:00", tz=TZ))

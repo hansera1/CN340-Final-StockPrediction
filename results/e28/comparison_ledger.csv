@@ -1,0 +1,24 @@
+﻿การทดลอง,คำถาม,จำนวนการเทียบที่ใช้ตัดสิน,ระดับ CI,ช่วงข้อมูล,แหล่งอ้างอิง,หมายเหตุ
+E9–E12,ทิศทาง/ราคา รอบ 1–3 (เลือกโมเดลที่ล็อก),,95% (lock_decision),walk-forward ก่อน 14 ต.ค.,results/lock_decision.md,ไม่พบไฟล์เกณฑ์หรือตารางคำตัดสินที่นับจำนวนได้ · CI ไม่ได้ปรับตามจำนวนการทดลอง (lock_decision.md บรรทัด 40)
+E13,ชั้น 2 รอบบ่าย S12 เทียบ S1,1,95%,walk-forward,results/e13_preregistration.md ข้อ E-4,นับ 1 การเทียบที่ใช้ส่งจริง · 12 แบบเงาไม่นับ
+E14,"D, D+C เทียบ A-un แยกรอบ",4,98.75%,walk-forward ถึง 12 ต.ค.,results/e14/verdict.csv,
+E14 ส่วนเพิ่ม,"C′, C-adv เทียบ A-un แยกรอบ",4,98.75%,walk-forward ถึง 12 ต.ค.,results/e14/cprime_verdict.csv,
+E14 ส่วนเพิ่ม,PR-C′ ราคา แยกรอบ,2,98.75%,walk-forward ถึง 12 ต.ค.,results/e14/prcprime_verdict.csv,
+ข้อ 9 (C′/C-adv),ตัดสิน 4 ช่องเทียบค่าตั้งต้น,4,99.7%,walk-forward ถึง 12 ต.ค.,results/decision_cprime.csv,
+E15,11 แบบ × 2 รอบ,22,99.55%,walk-forward ถึง 12 ต.ค.,results/e15_preregistration.md บรรทัด 28,ไม่พบไฟล์ verdict · นับจาก 11 แบบ × 2 รอบ
+E16,"A-un, A-dec × 2 รอบ เทียบ E0-un",4,95%,walk-forward ถึง 12 ต.ค.,results/e16/verdict.csv,
+E17a,"ราคา PR-D, PR-D+C, PR-mean × 2 รอบ",6,98.75%,walk-forward ถึง 12 ต.ค.,results/e17a/verdict.csv,
+E17b,ราคา 22 แบบ × 2 รอบ,44,99.77%,walk-forward ถึง 12 ต.ค.,results/e17b/verdict.csv,
+E18,H1–H3 ตลาดต่างประเทศ,3,95%,walk-forward ถึง 12 ต.ค.,results/e18/verdict.csv,
+E18b,ราคาเช้าเลื่อนด้วย gap 3 แบบ,3,98.33%,walk-forward ถึง 12 ต.ค.,results/e18b/verdict.csv,
+E19,CNN 1m,0,95%,8+6 วัน (สำรวจ),results/e19_preregistration.md,งานสำรวจ ไม่ใช้ตัดสิน
+E20,ตัวแทน SHR 4 ช่อง,4,99.7%,walk-forward ถึง 12 ต.ค.,results/e20/verdict.csv,E20b และ CNN เป็นรายงานเท่านั้น ไม่นับ
+E21,ablation 8 คู่ × 2 รอบ,16,99.7%,walk-forward ถึง 12 ต.ค.,results/e21/pairs.csv,
+E22,PR-k × 2 รอบ,2,99.7%,walk-forward ถึง 12 ต.ค.,results/e22/verdict.csv,
+E23,CNN+ANN skip ตัวแทน × 2 รอบ,2,99.7%,walk-forward ถึง 12 ต.ค.,results/e23/verdict.csv,
+E23b/E23c,CNN 1m / 5m,0,95%,สำรวจ,"results/e23b_preregistration.md, results/e23c_preregistration.md",งานสำรวจ ไม่ใช้ตัดสิน
+E24,ราคา 2 ขั้น ตัวแทน × 2 รอบ,2,99.7%,walk-forward ถึง 12 ต.ค.,results/e24/verdict.csv,
+E25,73 แบบ × 2 รอบ,146,99.7%,walk-forward ถึง 12 ต.ค.,results/e25/verdict.csv,
+E26,ทิศทาง 4 ช่อง + ราคา PR-A+F 6 ช่อง,10,98.33%,walk-forward ถึง 12 ต.ค.,"results/e26/direction_verdict.csv, results/e26/price_verdict.csv",price_verdict มี 16 แถว แต่ตัวแทนที่ใช้ตัดสินคือ PR-A+F1–F3 × 2 รอบ
+E27,วิเคราะห์ gap,0,95%,walk-forward ถึง 12 ต.ค.,results/e27_preregistration.md,รายงานเท่านั้น
+E28,"D-prime × 2 รอบ × ตัวเทียบ 2 ตัว (A-un, E0-un)",4,99.7%,walk-forward ถึง 12 ต.ค.,results/e28_preregistration.md,

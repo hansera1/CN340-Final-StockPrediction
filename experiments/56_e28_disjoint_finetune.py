@@ -1,7 +1,7 @@
 """E28: pretrain แล้ว fine-tune แยกเช้า/บ่ายด้วยข้อมูลที่ไม่ซ้อนกัน — เกณฑ์ใน results/e28_preregistration.md · รายงานเท่านั้น
 
     python experiments/56_e28_disjoint_finetune.py --one        # วัดเวลา 1 บล็อก (รันได้ทุกเมื่อ)
-    python experiments/56_e28_disjoint_finetune.py --part run   # รันเต็ม: หลังงานเย็นวันศุกร์ 13 พ.ย. 2026 เท่านั้น
+    python experiments/56_e28_disjoint_finetune.py --part run   # รันเต็ม (เจ้าของโปรเจกต์ปลดล็อก 9 พ.ย. 22:00)
     python experiments/56_e28_disjoint_finetune.py --part report
 → outputs/experiments/E28/ · results/e28/ · ไม่แตะระบบ live
 """
@@ -31,7 +31,7 @@ SESSIONS = (("morning", "เช้า"), ("afternoon", "บ่าย"))
 FRAC, GAP = 0.70, 5
 SENS = (0.60, 0.80)
 CONF, CONF_MECH = 0.997, 0.95
-FULL_RUN_FROM = pd.Timestamp("2026-11-13 18:00", tz="Asia/Bangkok")
+FULL_RUN_FROM = pd.Timestamp("2026-11-09 22:00", tz="Asia/Bangkok")   # เจ้าของโปรเจกต์สั่งรันก่อนกำหนด (ส่วนเพิ่มในเกณฑ์)
 OUT, RES = OUTPUT_DIR / "experiments" / "E28", ROOT / "results" / "e28"
 
 
@@ -212,11 +212,124 @@ def full(rules):
     s48 = _module("48_e23_skip_fx.py")
     new_ds = s48._load_new(rules)
     dn, shared_n = s31.aligned(new_ds, load_experiments())
-    days_new = int((np.sort(new_ds["date"].unique()) > np.datetime64(pd.Timestamp("2026-10-29", tz=rules["timezone"]))).sum())
+    days_new = int((pd.Series(new_ds["date"].unique()) > pd.Timestamp("2026-10-29", tz=rules["timezone"])).sum())
     for kind, name in [("D-prime", "dprime"), ("Pre70", "pre70")]:
         n, _ = run(dn, shared_n, rules, kind, FRAC, jobs_for(dn, rules, holdout=True, holdout_days=days_new))
         n.to_csv(OUT / f"{name}_new.csv", index=False)
     print("รันเต็มเสร็จ · ใช้ --part report ต่อ", flush=True)
+
+
+def load(name, tz):
+    p = pd.read_csv(OUT / name)
+    p["date"] = pd.to_datetime(p["date"], utc=True).dt.tz_convert(tz)
+    return p
+
+
+def window_metrics(p, ds, days, name):
+    """holdout / ข้อมูลใหม่ (พรรณนา): log loss, ความแม่น, สัดส่วนทาย "ขึ้น" เทียบสัดส่วนฐานจากวันก่อนช่วงนั้น"""
+    p = p[p["direction"].notna() & p["p_up"].notna()].copy()
+    start = p["date"].min()
+    hist = ds[(ds["date"] < start) & ds["direction"].notna()]
+    share = hist.groupby(["symbol", "session"])["direction"].apply(lambda s: (s == 1).mean())
+    p["p_E0"] = [share[(a, b)] for a, b in zip(p["symbol"], p["session"])]
+    y = (p["direction"] == 1).to_numpy(float)
+    rows = []
+    for sess, th in SESSIONS:
+        m = (p["session"] == sess).to_numpy()
+        for col, lab in [("p_up", name), ("p_E0", "E0-un")]:
+            q = p[col].to_numpy(float)[m]
+            rows.append({"ช่วง": f"{str(start)[:10]} – {str(p['date'].max())[:10]}", "รอบ": th, "แบบ": lab, "n": int(m.sum()), "log_loss": logloss(y[m], q).mean(),
+                         "acc_up_notup": ((q > .5) == (y[m] == 1)).mean(), "pred_up": (q > .5).mean(), "up_rate": y[m].mean()})
+    return pd.DataFrame(rows)
+
+
+def report(rules):
+    s18, s30, s42 = _module("18_score_round4.py"), _module("30_e16_up_notup.py"), _module("42_overfit_audit.py")
+    tz, n_boot = rules["timezone"], rules["evaluation"]["n_boot"]
+    ds, d, _ = prepare(rules)
+    RES.mkdir(parents=True, exist_ok=True)
+    preds = {"D-prime": "dprime", "Pre70": "pre70", "D-prime-60": "dprime_60", "D-prime-80": "dprime_80"}
+    x = load("dprime_predictions.csv", tz)[KEYS + ["direction", "common", "p_up"]].rename(columns={"p_up": "p_D-prime"})
+    for n, f in list(preds.items())[1:]:
+        x = x.merge(load(f"{f}_predictions.csv", tz)[KEYS + ["p_up"]].rename(columns={"p_up": f"p_{n}"}), on=KEYS)
+    e14 = pd.read_csv(OUTPUT_DIR / "experiments" / "E14" / "d_predictions.csv")
+    a_un = pd.read_csv(OUTPUT_DIR / "experiments" / "E16" / "a_un_predictions.csv")
+    for t in (e14, a_un):
+        t["date"] = pd.to_datetime(t["date"], utc=True).dt.tz_convert(tz)
+    others = {"D": e14, "A-un": a_un, "E0-un": s30.e0_window(ds, rules), "A-ud": s18.load("C1235", "E12_fd_lr", tz)}
+    for n, t in others.items():
+        x = x.merge(t[KEYS + ["p_up"]].rename(columns={"p_up": f"p_{n}"}), on=KEYS, how="left")
+    e15 = s42.load_pred(s42.EXP / "E15" / "predictions.csv", tz)
+    mlp = e15[(e15["model"] == "mlp") & (e15["split"] == "wf")][KEYS + ["p"]].rename(columns={"p": "p_E15 MLP"})
+    x = x.merge(mlp, on=KEYS, how="left")
+    need = ["p_D-prime", "p_Pre70", "p_D", "p_A-un", "p_E0-un"]
+    base = x[x["direction"].notna()]
+    use = base[base["common"].astype(bool) & base[need].notna().all(axis=1)].reset_index(drop=True)
+    excl = []
+    blocks = pd.read_csv(OUT / "dprime_blocks.csv")
+    for sess, th in SESSIONS:
+        b = blocks[blocks["session"] == sess]
+        a, u = base[base["session"] == sess], use[use["session"] == sess]
+        excl.append({"รอบ": th, "บล็อกทั้งหมด": len(b), "บล็อกใน common window": int(b["common"].sum()), "แถวทั้งหมด": len(a), "แถวตัดสิน": len(u),
+                     "แถวที่ตัดออก": len(a) - len(u), "วันตัดสิน": u["date"].nunique()})
+    excl = pd.DataFrame(excl)
+    cmp_rows = []
+    for a in ["D-prime", "Pre70", "D", "A-ud"]:
+        for b in ["A-un", "E0-un"]:
+            cmp_rows.append(s31.compare(use, a, b, CONF, n_boot))
+    pm = use[use["p_E15 MLP"].notna()].reset_index(drop=True)
+    for b in ["A-un", "E0-un"]:
+        cmp_rows.append(s31.compare(pm, "E15 MLP", b, CONF, n_boot))
+    c = pd.concat(cmp_rows, ignore_index=True)
+    verdict = []
+    for _, th in SESSIONS:
+        ok_all, row = True, {"รอบ": th}
+        for b in ["A-un", "E0-un"]:
+            q = c[(c["a"] == "D-prime") & (c["b"] == b)].set_index("group")
+            m = q.loc[th]
+            stocks = all(q.loc[f"{s} {th}", "d_ll_lo"] <= 0 for s in ("KBANK", "ADVANC"))
+            ok = bool(m["d_ll_hi"] < 0 and m["d_acc_hi"] >= 0 and stocks)
+            row.update({f"ผ่าน_{b}": ok, f"d_ll_{b}": m["d_ll"], f"lo_{b}": m["d_ll_lo"], f"hi_{b}": m["d_ll_hi"], f"d_acc_{b}": m["d_acc"], f"acc_lo_{b}": m["d_acc_lo"], f"acc_hi_{b}": m["d_acc_hi"]})
+            ok_all &= ok
+        row["ผ่าน"] = ok_all
+        verdict.append(row)
+    verdict = pd.DataFrame(verdict)
+    mech = pd.concat([s31.compare(use, a, b, CONF_MECH, n_boot) for a, b in [("D-prime", "Pre70"), ("D-prime", "D"), ("Pre70", "A-un")]], ignore_index=True)
+    sens = pd.concat([s31.compare(use, a, b, CONF, n_boot) for a in ["D-prime-60", "D-prime-80"] for b in ["A-un", "E0-un"]], ignore_index=True)
+    kap = []
+    for f, n in [("dprime", "D-prime 70/30"), ("dprime_60", "D-prime 60/40"), ("dprime_80", "D-prime 80/20")]:
+        b = pd.read_csv(OUT / f"{f}_blocks.csv")
+        b = b[b["common"].astype(bool)]
+        for sess, th in SESSIONS:
+            h = b[b["session"] == sess]
+            kap.append({"แบบ": n, "รอบ": th, "บล็อก": len(h), "κ=∞": float((~np.isfinite(h["kappa"])).mean()), **{f"κ={k:g}": float((h["kappa"] == k).mean()) for k in KAPPAS if np.isfinite(k)},
+                        "pre วัน (ต่ำสุด–สูงสุด)": f"{h['n_pre_days'].min()}–{h['n_pre_days'].max()}", "ft วัน (ต่ำสุด–สูงสุด)": f"{h['n_ft_days'].min()}–{h['n_ft_days'].max()}"})
+    kap = pd.DataFrame(kap)
+    y = (use["direction"] == 1).to_numpy(float)
+    fam = {n: use[KEYS].assign(ll=logloss(y, use[f"p_{n}"].to_numpy(float))) for n in ["D-prime", "Pre70", "D", "A-un", "E0-un", "D-prime-60", "D-prime-80"]}
+    pbo = pd.DataFrame(s42.pbo_row("E28", fam))
+    ledger = pd.read_csv(RES / "comparison_ledger.csv")
+    n_total = int(pd.to_numeric(ledger.iloc[:, 2], errors="coerce").sum())
+    conf_b = 1 - 0.05 / n_total
+    bonf = pd.concat([s31.compare(use, "D-prime", b, conf_b, 20000).assign(conf=conf_b, n_total=n_total) for b in ["A-un", "E0-un"]], ignore_index=True)
+    s48 = _module("48_e23_skip_fx.py")
+    new_ds = s48._load_new(rules)
+    win = pd.concat([window_metrics(load(f"{f}_{w}.csv", tz), ds if w == "holdout" else new_ds, None, n) for w in ("holdout", "new") for f, n in [("dprime", "D-prime"), ("pre70", "Pre70")]], ignore_index=True)
+    win = win.drop_duplicates(["ช่วง", "รอบ", "แบบ"])
+    for name, t in [("compare", c), ("verdict", verdict), ("mechanism", mech), ("sensitivity", sens), ("kappa", kap), ("pbo", pbo), ("bonferroni", bonf), ("excluded", excl), ("windows", win)]:
+        t.to_csv(RES / f"{name}.csv", index=False, encoding="utf-8-sig")
+    pd.set_option("display.width", 240)
+    pd.set_option("display.max_columns", 40)
+    show = ["a", "b", "group", "n", "acc_a", "acc_b", "pred_up_a", "ll_a", "ll_b", "d_ll", "d_ll_lo", "d_ll_hi", "d_acc", "d_acc_lo", "d_acc_hi"]
+    print(excl.to_string(index=False))
+    print(c[show].round(4).to_string(index=False))
+    print(verdict.round(4).to_string(index=False))
+    print(mech[mech["group"].isin(["เช้า", "บ่าย"])][show].round(4).to_string(index=False))
+    print(sens[sens["group"].isin(["เช้า", "บ่าย"])][show].round(4).to_string(index=False))
+    print(kap.round(3).to_string(index=False))
+    print(pbo.round(4).to_string(index=False))
+    print(bonf[bonf["group"].isin(["เช้า", "บ่าย"])][["a", "b", "group", "d_ll", "d_ll_lo", "d_ll_hi", "d_acc", "d_acc_lo", "d_acc_hi", "conf", "n_total"]].round(5).to_string(index=False))
+    print(win.round(4).to_string(index=False))
 
 
 def main():
@@ -230,9 +343,7 @@ def main():
     if "run" in args.part:
         full(rules)
     if "report" in args.part:
-        if not full_run_allowed():
-            raise SystemExit("ยังไม่มีผลรันเต็ม")
-        raise SystemExit("ส่วนรายงานจะเขียนหลังรันเต็ม ตามลำดับงานข้อ 8 ของ prompt")
+        report(rules)
 
 
 if __name__ == "__main__":
