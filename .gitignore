@@ -7,3 +7,7 @@ outputs/
 !outputs/.gitkeep
 # รหัส Settrade — ห้าม commit
 .env
+
+# slide build tools
+docs/slides/.build/
+node_modules/
