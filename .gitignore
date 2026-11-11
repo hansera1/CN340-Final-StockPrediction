@@ -11,3 +11,7 @@ outputs/
 # slide build tools
 docs/slides/.build/
 node_modules/
+
+# สไลด์ที่มีราคาจริง (ใช้ส่วนบุคคล ห้ามเผยแพร่)
+docs/slides/*.pptx
+docs/slides/*.pdf
